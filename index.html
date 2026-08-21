@@ -219,13 +219,14 @@
     <button class="nav-tab" onclick="switchTab('paycert')">📜 Pay Certificate</button>
     <button class="nav-tab" onclick="switchTab('lpc')">📑 Last Pay Certificate (LPC)</button>
     <button class="nav-tab" onclick="switchTab('staff')">👥 Staff Directory & Entry</button>
+    <button class="nav-tab" onclick="switchTab('audit')">🔎 Monthwise Audit</button>
   </div>
 </div>
 
 <div class="controls-card no-print">
   <div class="control-group">
-    <label>Salary Month (MMM YYYY)</label>
-    <input type="month" id="cfgMonthPicker" value="2026-07" onchange="onMonthPickerChange()">
+    <label>Salary Month (Monthwise)</label>
+    <select id="cfgMonthPicker" onchange="onMonthPickerChange()" style="min-width:150px;"></select>
     <input type="hidden" id="cfgMonth" value="July-2026">
   </div>
   <div class="control-group">
@@ -381,6 +382,35 @@
       </div>
     </div>
     <div id="lpc-container"></div>
+  </div>
+
+  <!-- ================= TAB 5: MONTHWISE AUDIT ================= -->
+  <div id="tab-audit" class="tab-content">
+    <div class="controls-card no-print" style="margin:0 0 16px 0;">
+      <div class="control-group">
+        <label>Audit Month</label>
+        <select id="audit-month-a" onchange="renderAudit()" style="min-width:150px;"></select>
+      </div>
+      <div class="control-group">
+        <label>Compare With Month</label>
+        <select id="audit-month-b" onchange="renderAudit()" style="min-width:150px;"></select>
+      </div>
+      <button class="btn btn-primary" onclick="renderAudit()">🔄 Refresh Audit</button>
+    </div>
+    <div class="table-responsive">
+      <div class="school-head">
+        <h2>MONTHWISE SALARY AUDIT</h2>
+        <h3><span id="audit-title-a"></span> vs <span id="audit-title-b"></span></h3>
+      </div>
+      <table class="sheet-table">
+        <thead><tr>
+          <th>Sl</th><th>Name & Designation</th><th>Basic A</th><th>Gross A</th><th>GPF A</th><th>P.Tax A</th><th>I.Tax A</th><th>Ded. A</th><th>Net A</th>
+          <th>Basic B</th><th>Gross B</th><th>GPF B</th><th>P.Tax B</th><th>I.Tax B</th><th>Ded. B</th><th>Net B</th><th>Net Δ</th>
+        </tr></thead>
+        <tbody id="audit-tbody"></tbody>
+        <tfoot id="audit-tfoot"></tfoot>
+      </table>
+    </div>
   </div>
 
   <!-- ================= TAB 4: STAFF DIRECTORY & ENTRY ================= -->
@@ -581,49 +611,72 @@ const DEFAULT_STAFF = [
   { "sl": 29, "name": "PRAKASH SARDAR", "desig": "GR.D-LAB ATTENDANT", "group": "Gr-D", "gender": "M", "approval": "4848/S; 31-12-2012", "level": "LEVEL-1", "cell": "CELL-17", "basic": 27200.0, "da": 4896.0, "hra": 3264.0, "ma": 500.0, "addl": 0.0, "gross": 35860.0, "gpf": 2000.0, "ptax": 150.0, "itax": 0.0, "total_ded": 2150.0, "net": 33710.0, "dob": "1985-07-27", "dor": "2045-07-31", "doj_service": "2012-11-21", "doj_school": "2012-11-21", "emp_code": "PCHJ4347", "mob_no": "9002374924", "qualification": "M.P.", "pay_level_scale": "LEVEL-1-PB-1:4900-16200-GP-RS-1700", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "ERDPS1092G" }
 ];
 
-// Helper to convert "YYYY-MM" from calendar picker to "MMM-YYYY"
+// Monthwise storage helpers
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
 function parseMonthPickerValue(val) {
   if (!val) return "July-2026";
   const [year, monthNum] = val.split('-');
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const mName = months[parseInt(monthNum, 10) - 1] || "July";
-  return `${mName}-${year}`;
+  return `${MONTH_NAMES[parseInt(monthNum,10)-1] || "July"}-${year}`;
 }
-
+function monthDisplayToISO(monthStr) {
+  const [month, year] = monthStr.split('-');
+  const idx = MONTH_NAMES.indexOf(month);
+  return idx >= 0 ? `${year}-${String(idx+1).padStart(2,'0')}` : '2026-07';
+}
 function formatMonthPickerToDisplay(val) {
   if (!val) return "July 2026";
   const [year, monthNum] = val.split('-');
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const mName = months[parseInt(monthNum, 10) - 1] || "July";
-  return `${mName} ${year}`;
+  return `${MONTH_NAMES[parseInt(monthNum,10)-1] || "July"} ${year}`;
 }
-
-function getStorageKey() {
-  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
-  return 'TFHS_SALARY_MONTH_' + parseMonthPickerValue(pickerVal);
+function getStorageKey(monthStr) {
+  monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
+  return 'TFHS_SALARY_MONTH_' + monthStr;
 }
-
-let staffData = json.parse(localStorage.getItem(getStorageKey())) || json.parse(json.stringify(DEFAULT_STAFF));
-
-function onMonthPickerChange() {
-  const pickerVal = document.getElementById('cfgMonthPicker').value;
-  const monthStr = parseMonthPickerValue(pickerVal);
-  document.getElementById('cfgMonth').value = monthStr;
-  
-  const loaded = localStorage.getItem('TFHS_SALARY_MONTH_' + monthStr);
-  if (loaded) {
-    staffData = json.parse(loaded);
-  } else {
-    staffData = json.parse(json.stringify(DEFAULT_STAFF));
+function getSavedMonths() {
+  const arr = [];
+  for (let i=0;i<localStorage.length;i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('TFHS_SALARY_MONTH_')) arr.push(k.substring('TFHS_SALARY_MONTH_'.length));
   }
+  if (!arr.includes('July-2026')) arr.push('July-2026');
+  return arr.sort((a,b)=>{
+    const da=new Date(monthDisplayToISO(a)+'-01'), db=new Date(monthDisplayToISO(b)+'-01');
+    return da-db;
+  });
+}
+function populateMonthDropdowns() {
+  const months=getSavedMonths();
+  const main=document.getElementById('cfgMonthPicker');
+  const current = main.value || '2026-07';
+  main.innerHTML=months.map(m=>`<option value="${monthDisplayToISO(m)}">${m}</option>`).join('');
+  main.value=months.includes(parseMonthPickerValue(current)) ? current : monthDisplayToISO(months[months.length-1]);
+  ['audit-month-a','audit-month-b'].forEach((id,idx)=>{
+    const el=document.getElementById(id); if(!el) return;
+    const old=el.value;
+    el.innerHTML=months.map(m=>`<option value="${m}">${m}</option>`).join('');
+    if (months.includes(old)) el.value=old;
+    else el.value=months[Math.max(0,months.length-1-idx)];
+  });
+}
+let staffData = [];
+function loadMonthData(monthStr) {
+  const loaded=localStorage.getItem(getStorageKey(monthStr));
+  return loaded ? json.parse(loaded) : json.parse(json.stringify(DEFAULT_STAFF));
+}
+function onMonthPickerChange() {
+  const monthStr=parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  document.getElementById('cfgMonth').value=monthStr;
+  staffData=loadMonthData(monthStr);
   renderAll();
 }
-
 function saveMonthData() {
-  const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
-  localStorage.setItem('TFHS_SALARY_MONTH_' + monthStr, json.stringify(staffData));
+  const monthStr=parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  localStorage.setItem(getStorageKey(monthStr), json.stringify(staffData));
+  populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
+function getStaffForMonth(monthStr) { return loadMonthData(monthStr); }
 
 function numberToWordsINR(amount) {
   let n = Math.round(amount);
@@ -711,6 +764,7 @@ function switchTab(tabId) {
   if (tabId === 'paycert') renderPayCertOptions();
   if (tabId === 'lpc') renderLPCOptions();
   if (tabId === 'staff') renderStaffTable();
+  if (tabId === 'audit') { populateMonthDropdowns(); renderAudit(); }
 }
 
 // Render Master Acquittance Roll with Category Sub-Totals & Detailed Summary Table at the End
@@ -1190,6 +1244,43 @@ function exportDataJSON() {
   document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
 }
 
+function fmtAudit(n){ return (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function renderAudit(){
+  const a=document.getElementById('audit-month-a'), b=document.getElementById('audit-month-b');
+  if(!a||!b) return;
+  const ma=a.value||'July-2026', mb=b.value||'July-2026';
+  const da=getStaffForMonth(ma), db=getStaffForMonth(mb);
+  const mapB=new Map(db.map(e=>[(e.emp_code||e.name||'').toString().toUpperCase(),e]));
+  const rows=[];
+  da.forEach((raw,i)=>{
+    const key=(raw.emp_code||raw.name||'').toString().toUpperCase();
+    const eB=mapB.get(key)||{};
+    const A=getCalculatedStaff(raw), B=getCalculatedStaff(eB);
+    rows.push({i:i+1,A,B,diff:(B.calculatedNet||0)-(A.calculatedNet||0)});
+  });
+  document.getElementById('audit-title-a').textContent=ma;
+  document.getElementById('audit-title-b').textContent=mb;
+  const tb=document.getElementById('audit-tbody'); tb.innerHTML='';
+  let t={aBasic:0,aGross:0,aGpf:0,aPtax:0,aItax:0,aDed:0,aNet:0,bBasic:0,bGross:0,bGpf:0,bPtax:0,bItax:0,bDed:0,bNet:0,diff:0};
+  rows.forEach(r=>{
+    const A=r.A||{},B=r.B||{};
+    const vals=[A.basic,A.calculatedGross,A.gpf,A.calculatedPTax,A.itax,A.calculatedTotalDed,A.calculatedNet,B.basic,B.calculatedGross,B.gpf,B.calculatedPTax,B.itax,B.calculatedTotalDed,B.calculatedNet];
+    const nums=vals.map(x=>Number(x)||0);
+    t.aBasic+=nums[0];t.aGross+=nums[1];t.aGpf+=nums[2];t.aPtax+=nums[3];t.aItax+=nums[4];t.aDed+=nums[5];t.aNet+=nums[6];
+    t.bBasic+=nums[7];t.bGross+=nums[8];t.bGpf+=nums[9];t.bPtax+=nums[10];t.bItax+=nums[11];t.bDed+=nums[12];t.bNet+=nums[13];t.diff+=r.diff;
+    tb.innerHTML+=`<tr>
+      <td class="center">${r.i}</td><td class="wrap-text"><b>${A.name||B.name||'Not Found'}</b><br><small>${A.desig||B.desig||''}</small></td>
+      ${nums.slice(0,7).map(x=>`<td class="num">${fmtAudit(x)}</td>`).join('')}
+      ${nums.slice(7).map(x=>`<td class="num">${fmtAudit(x)}</td>`).join('')}
+      <td class="num bold">${fmtAudit(r.diff)}</td></tr>`;
+  });
+  document.getElementById('audit-tfoot').innerHTML=`<tr class="subtotal-row">
+    <td colspan="2">TOTAL</td>
+    <td class="num">${fmtAudit(t.aBasic)}</td><td class="num">${fmtAudit(t.aGross)}</td><td class="num">${fmtAudit(t.aGpf)}</td><td class="num">${fmtAudit(t.aPtax)}</td><td class="num">${fmtAudit(t.aItax)}</td><td class="num">${fmtAudit(t.aDed)}</td><td class="num">${fmtAudit(t.aNet)}</td>
+    <td class="num">${fmtAudit(t.bBasic)}</td><td class="num">${fmtAudit(t.bGross)}</td><td class="num">${fmtAudit(t.bGpf)}</td><td class="num">${fmtAudit(t.bPtax)}</td><td class="num">${fmtAudit(t.bItax)}</td><td class="num">${fmtAudit(t.bDed)}</td><td class="num">${fmtAudit(t.bNet)}</td><td class="num">${fmtAudit(t.diff)}</td>
+  </tr>`;
+}
+
 function renderAll() {
   renderAroll();
   renderPayCertOptions();
@@ -1198,11 +1289,13 @@ function renderAll() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Initialize default month storage if empty
-  const storageKey = getStorageKey();
-  if (!localStorage.getItem(storageKey)) {
-    localStorage.setItem(storageKey, json.stringify(DEFAULT_STAFF));
+  if (!localStorage.getItem(getStorageKey('July-2026'))) {
+    localStorage.setItem(getStorageKey('July-2026'), json.stringify(DEFAULT_STAFF));
   }
+  populateMonthDropdowns();
+  const main=document.getElementById('cfgMonthPicker');
+  main.value=main.value || '2026-07';
+  staffData=loadMonthData(parseMonthPickerValue(main.value));
   renderAll();
 });
 </script>
