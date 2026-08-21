@@ -224,8 +224,9 @@
 
 <div class="controls-card no-print">
   <div class="control-group">
-    <label>Salary Month & Year</label>
-    <input type="text" id="cfgMonth" value="July-2026" onchange="renderAll()">
+    <label>Salary Month (MMM YYYY)</label>
+    <input type="month" id="cfgMonthPicker" value="2026-07" onchange="onMonthPickerChange()">
+    <input type="hidden" id="cfgMonth" value="July-2026">
   </div>
   <div class="control-group">
     <label>DA Rate (%)</label>
@@ -253,11 +254,12 @@
       <option value="manual">Manual Override</option>
     </select>
   </div>
-  <div style="margin-left: auto; display: flex; gap: 8px;">
+  <div style="margin-left: auto; display: flex; gap: 8px; align-items: flex-end;">
+    <button class="btn btn-primary" onclick="saveMonthData()">💾 Save Month Data</button>
     <button class="btn btn-success" onclick="document.getElementById('importJSONFile').click()">📁 Import JSON</button>
     <input type="file" id="importJSONFile" style="display:none" accept=".json" onchange="importDataJSON(event)">
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print View</button>
-    <button class="btn btn-outline" onclick="resetToDefault()">🔄 Reset Data</button>
+    <button class="btn btn-outline" onclick="resetToDefault()">🔄 Reset Default</button>
   </div>
 </div>
 
@@ -538,7 +540,6 @@ const json = { parse: JSON.parse, stringify: JSON.stringify };
 // Date formatter to DD-MM-YYYY
 function formatDateDDMMYYYY(dateStr) {
   if (!dateStr) return 'N.A.';
-  // If already formatted or ISO format
   if (dateStr.includes('-') && dateStr.length === 10) {
     const parts = dateStr.split('-');
     if (parts[0].length === 4) {
@@ -580,7 +581,49 @@ const DEFAULT_STAFF = [
   { "sl": 29, "name": "PRAKASH SARDAR", "desig": "GR.D-LAB ATTENDANT", "group": "Gr-D", "gender": "M", "approval": "4848/S; 31-12-2012", "level": "LEVEL-1", "cell": "CELL-17", "basic": 27200.0, "da": 4896.0, "hra": 3264.0, "ma": 500.0, "addl": 0.0, "gross": 35860.0, "gpf": 2000.0, "ptax": 150.0, "itax": 0.0, "total_ded": 2150.0, "net": 33710.0, "dob": "1985-07-27", "dor": "2045-07-31", "doj_service": "2012-11-21", "doj_school": "2012-11-21", "emp_code": "PCHJ4347", "mob_no": "9002374924", "qualification": "M.P.", "pay_level_scale": "LEVEL-1-PB-1:4900-16200-GP-RS-1700", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "ERDPS1092G" }
 ];
 
-let staffData = json.parse(localStorage.getItem('TFHS_JULY26_STAFF_v21')) || json.parse(json.stringify(DEFAULT_STAFF));
+// Helper to convert "YYYY-MM" from calendar picker to "MMM-YYYY"
+function parseMonthPickerValue(val) {
+  if (!val) return "July-2026";
+  const [year, monthNum] = val.split('-');
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const mName = months[parseInt(monthNum, 10) - 1] || "July";
+  return `${mName}-${year}`;
+}
+
+function formatMonthPickerToDisplay(val) {
+  if (!val) return "July 2026";
+  const [year, monthNum] = val.split('-');
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const mName = months[parseInt(monthNum, 10) - 1] || "July";
+  return `${mName} ${year}`;
+}
+
+function getStorageKey() {
+  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
+  return 'TFHS_SALARY_MONTH_' + parseMonthPickerValue(pickerVal);
+}
+
+let staffData = json.parse(localStorage.getItem(getStorageKey())) || json.parse(json.stringify(DEFAULT_STAFF));
+
+function onMonthPickerChange() {
+  const pickerVal = document.getElementById('cfgMonthPicker').value;
+  const monthStr = parseMonthPickerValue(pickerVal);
+  document.getElementById('cfgMonth').value = monthStr;
+  
+  const loaded = localStorage.getItem('TFHS_SALARY_MONTH_' + monthStr);
+  if (loaded) {
+    staffData = json.parse(loaded);
+  } else {
+    staffData = json.parse(json.stringify(DEFAULT_STAFF));
+  }
+  renderAll();
+}
+
+function saveMonthData() {
+  const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  localStorage.setItem('TFHS_SALARY_MONTH_' + monthStr, json.stringify(staffData));
+  alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
+}
 
 function numberToWordsINR(amount) {
   let n = Math.round(amount);
@@ -672,13 +715,14 @@ function switchTab(tabId) {
 
 // Render Master Acquittance Roll with Category Sub-Totals & Detailed Summary Table at the End
 function renderAroll() {
-  const month = document.getElementById('cfgMonth').value;
+  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
+  const displayMonth = formatMonthPickerToDisplay(pickerVal);
   const daRate = document.getElementById('cfgDA').value;
   const hraMode = document.getElementById('cfgHRAMode').value;
   const hraMax = document.getElementById('cfgHRAMax').value;
   const maAmt = document.getElementById('cfgMA').value;
   
-  document.querySelectorAll('.month-display').forEach(el => el.innerText = month);
+  document.querySelectorAll('.month-display').forEach(el => el.innerText = displayMonth);
   document.getElementById('da-disp').innerText = daRate;
   document.getElementById('mode-disp').innerText = hraMode === '12' ? '12% of Basic' : 'Individual Manual';
   document.getElementById('cap-disp').innerText = hraMax;
@@ -898,15 +942,16 @@ function generatePayCertHTML(emp, month) {
 
 function renderPayCertificate() {
   const mode = document.getElementById('paycert-mode').value;
-  const month = document.getElementById('cfgMonth').value;
+  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
+  const displayMonth = formatMonthPickerToDisplay(pickerVal);
   const container = document.getElementById('paycert-container');
   container.innerHTML = '';
   if (mode === 'single') {
     const idx = parseInt(document.getElementById('paycert-select').value) || 0;
-    container.innerHTML = generatePayCertHTML(getCalculatedStaff(staffData[idx]), month);
+    container.innerHTML = generatePayCertHTML(getCalculatedStaff(staffData[idx]), displayMonth);
   } else {
     let batchHTML = '';
-    staffData.forEach(rawEmp => { batchHTML += generatePayCertHTML(getCalculatedStaff(rawEmp), month); });
+    staffData.forEach(rawEmp => { batchHTML += generatePayCertHTML(getCalculatedStaff(rawEmp), displayMonth); });
     container.innerHTML = batchHTML;
   }
 }
@@ -926,7 +971,8 @@ function renderLPCOptions() {
 function renderLPC() {
   const idx = parseInt(document.getElementById('lpc-select').value) || 0;
   const emp = getCalculatedStaff(staffData[idx]);
-  const month = document.getElementById('cfgMonth').value;
+  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
+  const displayMonth = formatMonthPickerToDisplay(pickerVal);
   const releaseDateISO = document.getElementById('lpc-release-date').value || '2025-12-01';
   const releaseDateFormatted = formatDateDDMMYYYY(releaseDateISO);
   const reason = document.getElementById('lpc-reason').value;
@@ -955,9 +1001,9 @@ function renderLPC() {
       <div class="lpc-row"><strong>7. Reason for leaving the school:</strong> ${reason}</div>
       <div class="lpc-row"><strong>8. Date of Birth:</strong> ${formatDateDDMMYYYY(emp.dob)}</div>
       <div class="lpc-row" style="border: 1px solid #000; padding: 7px; margin: 8px 0; background: #fafafa;">
-        ${heShe} has drawn substantive pay as BASIC PAY : Rs. ${emp.basic.toLocaleString('en-IN', {minimumFractionDigits: 2})}; DA : Rs. ${emp.calculatedDA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HRA : Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; MA : Rs. ${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HM / AHM / Other Allowances : Rs. ${emp.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})} at the rate (Gross Salary) : Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsGross} ] a month ${month}.<br>
+        ${heShe} has drawn substantive pay as BASIC PAY : Rs. ${emp.basic.toLocaleString('en-IN', {minimumFractionDigits: 2})}; DA : Rs. ${emp.calculatedDA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HRA : Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; MA : Rs. ${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HM / AHM / Other Allowances : Rs. ${emp.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})} at the rate (Gross Salary) : Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsGross} ] a month ${displayMonth}.<br>
         and additional pay as -------------NIL---------- at the rate of Rs. -------X------- a month---X---.<br>
-        Less the GPF : Rs. ${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; P.TAX : Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; I.TAX : Rs. ${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}. Total deduction = Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsDed} ]. Deductions shown below, up to the month of ${month}.
+        Less the GPF : Rs. ${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; P.TAX : Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; I.TAX : Rs. ${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}. Total deduction = Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsDed} ]. Deductions shown below, up to the month of ${displayMonth}.
       </div>
       <div class="lpc-row"><strong>${heShe} made over charge of ${hisHer.toLowerCase()} duties on the afternoon of ${releaseDateFormatted}</strong></div>
       
@@ -1069,7 +1115,7 @@ function closeStaffModal() { document.getElementById('staffModal').classList.rem
 function editStaff(idx) { openStaffModal(idx); }
 function deleteStaff(idx) {
   if (confirm(`Are you sure you want to remove ${staffData[idx].name}?`)) {
-    staffData.splice(idx, 1); saveData(); renderAll();
+    staffData.splice(idx, 1); saveMonthData(); renderAll();
   }
 }
 
@@ -1101,10 +1147,8 @@ function saveStaff(e) {
   };
   if (editIdx >= 0) staffData[editIdx] = { ...staffData[editIdx], ...emp };
   else staffData.push(emp);
-  saveData(); closeStaffModal(); renderAll();
+  saveMonthData(); closeStaffModal(); renderAll();
 }
-
-function saveData() { localStorage.setItem('TFHS_JULY26_STAFF_v22', json.stringify(staffData)); }
 
 function importDataJSON(event) {
   const file = event.target.files[0];
@@ -1115,7 +1159,7 @@ function importDataJSON(event) {
       const imported = json.parse(e.target.result);
       if (Array.isArray(imported) && imported.length > 0) {
         staffData = imported;
-        saveData();
+        saveMonthData();
         renderAll();
         alert(`Successfully imported ${imported.length} staff records!`);
       } else {
@@ -1129,24 +1173,20 @@ function importDataJSON(event) {
 }
 
 function resetToDefault() {
-  if (confirm("Reset all staff records and salary parameters to default July 2026 data?")) {
+  if (confirm(`Reset staff records for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)} to default?`)) {
     staffData = json.parse(json.stringify(DEFAULT_STAFF));
-    localStorage.removeItem('TFHS_JULY26_STAFF_v22');
-    document.getElementById('cfgMonth').value = 'July-2026';
-    document.getElementById('cfgDA').value = '18';
-    document.getElementById('cfgHRAMode').value = 'individual';
-    document.getElementById('cfgHRAMax').value = '12000';
-    document.getElementById('cfgMA').value = '500';
-    document.getElementById('cfgPTaxMode').value = 'auto';
+    localStorage.removeItem(getStorageKey());
     renderAll();
   }
 }
 
 function exportDataJSON() {
+  const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
+  const displayMonth = parseMonthPickerValue(pickerVal);
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(staffData, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `TFHS_Staff_Salary_${document.getElementById('cfgMonth').value}.json`);
+  downloadAnchor.setAttribute("download", `TFHS_Staff_Salary_${displayMonth}.json`);
   document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
 }
 
@@ -1157,7 +1197,14 @@ function renderAll() {
   renderStaffTable();
 }
 
-window.addEventListener('DOMContentLoaded', () => { renderAll(); });
+window.addEventListener('DOMContentLoaded', () => {
+  // Initialize default month storage if empty
+  const storageKey = getStorageKey();
+  if (!localStorage.getItem(storageKey)) {
+    localStorage.setItem(storageKey, json.stringify(DEFAULT_STAFF));
+  }
+  renderAll();
+});
 </script>
 
 </body>
