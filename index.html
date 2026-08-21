@@ -225,8 +225,8 @@
 
 <div class="controls-card no-print">
   <div class="control-group">
-    <label>Salary Month (Monthwise)</label>
-    <select id="cfgMonthPicker" onchange="onMonthPickerChange()" style="min-width:150px;"></select>
+    <label>Salary Month (MMM YYYY)</label>
+    <select id="cfgMonthPicker" onchange="onMonthPickerChange()" style="min-width:160px;"></select>
     <input type="hidden" id="cfgMonth" value="July-2026">
   </div>
   <div class="control-group">
@@ -257,8 +257,11 @@
   </div>
   <div style="margin-left: auto; display: flex; gap: 8px; align-items: flex-end;">
     <button class="btn btn-primary" onclick="saveMonthData()">💾 Save Month Data</button>
-    <button class="btn btn-success" onclick="document.getElementById('importJSONFile').click()">📁 Import JSON</button>
+    <button class="btn btn-success" onclick="document.getElementById('importJSONFile').click()">📁 Import This Month</button>
     <input type="file" id="importJSONFile" style="display:none" accept=".json" onchange="importDataJSON(event)">
+    <button class="btn btn-success" onclick="exportAllMonthsJSON()">⬇️ Export All 12 Months</button>
+    <button class="btn btn-success" onclick="document.getElementById('importAllJSONFile').click()">⬆️ Import All 12 Months</button>
+    <input type="file" id="importAllJSONFile" style="display:none" accept=".json" onchange="importAllMonthsJSON(event)">
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print View</button>
     <button class="btn btn-outline" onclick="resetToDefault()">🔄 Reset Default</button>
   </div>
@@ -388,25 +391,28 @@
   <div id="tab-audit" class="tab-content">
     <div class="controls-card no-print" style="margin:0 0 16px 0;">
       <div class="control-group">
-        <label>Audit Month</label>
+        <label>Audit Month A</label>
         <select id="audit-month-a" onchange="renderAudit()" style="min-width:150px;"></select>
       </div>
       <div class="control-group">
-        <label>Compare With Month</label>
+        <label>Compare Month B</label>
         <select id="audit-month-b" onchange="renderAudit()" style="min-width:150px;"></select>
       </div>
       <button class="btn btn-primary" onclick="renderAudit()">🔄 Refresh Audit</button>
     </div>
     <div class="table-responsive">
       <div class="school-head">
-        <h2>MONTHWISE SALARY AUDIT</h2>
+        <h2>MONTHWISE SALARY AUDIT & COMPARISON</h2>
         <h3><span id="audit-title-a"></span> vs <span id="audit-title-b"></span></h3>
       </div>
       <table class="sheet-table">
-        <thead><tr>
-          <th>Sl</th><th>Name & Designation</th><th>Basic A</th><th>Gross A</th><th>GPF A</th><th>P.Tax A</th><th>I.Tax A</th><th>Ded. A</th><th>Net A</th>
-          <th>Basic B</th><th>Gross B</th><th>GPF B</th><th>P.Tax B</th><th>I.Tax B</th><th>Ded. B</th><th>Net B</th><th>Net Δ</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th>Sl</th><th>Name & Designation</th>
+            <th>Basic A</th><th>Gross A</th><th>GPF A</th><th>P.Tax A</th><th>I.Tax A</th><th>Ded. A</th><th>Net A</th>
+            <th>Basic B</th><th>Gross B</th><th>GPF B</th><th>P.Tax B</th><th>I.Tax B</th><th>Ded. B</th><th>Net B</th><th>Net Δ (Rs.)</th>
+          </tr>
+        </thead>
         <tbody id="audit-tbody"></tbody>
         <tfoot id="audit-tfoot"></tfoot>
       </table>
@@ -567,7 +573,6 @@
 // JSON import / parse wrapper
 const json = { parse: JSON.parse, stringify: JSON.stringify };
 
-// Date formatter to DD-MM-YYYY
 function formatDateDDMMYYYY(dateStr) {
   if (!dateStr) return 'N.A.';
   if (dateStr.includes('-') && dateStr.length === 10) {
@@ -611,71 +616,147 @@ const DEFAULT_STAFF = [
   { "sl": 29, "name": "PRAKASH SARDAR", "desig": "GR.D-LAB ATTENDANT", "group": "Gr-D", "gender": "M", "approval": "4848/S; 31-12-2012", "level": "LEVEL-1", "cell": "CELL-17", "basic": 27200.0, "da": 4896.0, "hra": 3264.0, "ma": 500.0, "addl": 0.0, "gross": 35860.0, "gpf": 2000.0, "ptax": 150.0, "itax": 0.0, "total_ded": 2150.0, "net": 33710.0, "dob": "1985-07-27", "dor": "2045-07-31", "doj_service": "2012-11-21", "doj_school": "2012-11-21", "emp_code": "PCHJ4347", "mob_no": "9002374924", "qualification": "M.P.", "pay_level_scale": "LEVEL-1-PB-1:4900-16200-GP-RS-1700", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "ERDPS1092G" }
 ];
 
-// Monthwise storage helpers
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DEFAULT_MARCH_STAFF = [
+  { "sl": 1, "name": "PRABIR KUMAR DANGAR", "desig": "HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2252/S; 02-08-2019", "level": "LEVEL-16", "cell": "CELL-21", "basic": 101400.0, "da": 18252.0, "hra": 12000.0, "ma": 500.0, "addl": 500.0, "gross": 132652.0, "gpf": 40000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 40200.0, "net": 92452.0, "dob": "1969-04-10", "dor": "2029-04-30", "doj_service": "1997-10-06", "doj_school": "2019-07-25", "emp_code": "JVMK0539", "mob_no": "9933035811", "qualification": "M.Sc.(Math),B.Ed.", "pay_level_scale": "LEVEL-16-PB-4-9000-40500-GP-RS-5400", "staff_group": "HEADMASTER", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "AHGPD9070Q" },
+  { "sl": 2, "name": "SWAPAN KUMAR MAJI", "desig": "ASSISTANT HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2540/S; 31-07-1997", "level": "LEVEL-14", "cell": "CELL-31", "basic": 96900.0, "da": 17442.0, "hra": 11628.0, "ma": 500.0, "addl": 500.0, "gross": 126970.0, "gpf": 30000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 30200.0, "net": 96770.0, "dob": "1970-11-25", "dor": "2030-11-30", "doj_service": "1992-01-01", "doj_school": "1997-06-28", "emp_code": "OTCJ3577", "mob_no": "9434521097", "qualification": "B.A(Hons).,B.Ed.", "pay_level_scale": "LEVEL-14-PB-4-9000-40500-GP-RS-4700", "staff_group": "SOCIAL SCIENCE GROUP", "subject": "Geography", "caste": "S.C.", "medium": "Bengali", "pan": "ADJPG0083H" },
+  { "sl": 3, "name": "AMAL CHANDRA SARDAR", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "2953/S; 21-12-1995", "level": "LEVEL-15", "cell": "CELL-30", "basic": 100500.0, "da": 18090.0, "hra": 12000.0, "ma": 500.0, "addl": 0.0, "gross": 131090.0, "gpf": 0.0, "ptax": 200.0, "itax": 0.0, "total_ded": 200.0, "net": 130890.0, "dob": "1966-05-12", "dor": "2026-05-31", "doj_service": "1991-01-17", "doj_school": "1995-09-01", "emp_code": "OMQL6690", "mob_no": "9474810249", "qualification": "M.A.(Hist),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "History", "caste": "S.T.", "medium": "Bengali", "pan": "AKCPS5925Q" },
+  { "sl": 4, "name": "PARTHA KUMAR PATRA", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "M", "approval": "3295/S; 29-10-2007", "level": "LEVEL-12", "cell": "CELL-19", "basic": 60900.0, "da": 10962.0, "hra": 7308.0, "ma": 500.0, "addl": 0.0, "gross": 79670.0, "gpf": 12000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 12200.0, "net": 67470.0, "dob": "1983-06-19", "dor": "2043-06-30", "doj_service": "2007-10-04", "doj_school": "2007-10-04", "emp_code": "HKQT4659", "mob_no": "9002535438", "qualification": "B.Sc.,B.Ed.", "pay_level_scale": "LEVEL-12-PB-4-9000-40500-GP-RS-4400", "staff_group": "SCIENCE GROUP", "subject": "MATH/ PURE SC", "caste": "Gen", "medium": "Bengali", "pan": "ADNPG9413D" },
+  { "sl": 5, "name": "MAHIM KUMAR PAINE", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "3881/S; 31-10-2008", "level": "LEVEL-15", "cell": "CELL-18", "basic": 70500.0, "da": 12690.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 89690.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 79490.0, "dob": "1982-08-02", "dor": "2042-08-31", "doj_service": "2008-09-11", "doj_school": "2008-09-11", "emp_code": "WMAO0787", "mob_no": "9433414565", "qualification": "M.A.(Beng),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "LANGUAGE GROUP", "subject": "Bengali", "caste": "Gen", "medium": "Bengali", "pan": "AUUPP3172G" },
+  { "sl": 6, "name": "KABITA MANDAL", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "3881/S; 31-10-2008", "level": "LEVEL-15", "cell": "CELL-18", "basic": 70500.0, "da": 12690.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 89690.0, "gpf": 15000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 15200.0, "net": 74490.0, "dob": "1981-04-06", "dor": "2041-04-30", "doj_service": "2008-09-13", "doj_school": "2008-09-13", "emp_code": "TUEO5927", "mob_no": "9434481805", "qualification": "M.A.(Beng),B.Ed", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "Bengali", "caste": "SC", "medium": "Bengali", "pan": "BCGPP3004A" },
+  { "sl": 7, "name": "TAPAS KUNDU", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "585/S;24-02-2009", "level": "LEVEL-15", "cell": "CELL-17", "basic": 68400.0, "da": 12312.0, "hra": 8208.0, "ma": 500.0, "addl": 0.0, "gross": 89420.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 79220.0, "dob": "1969-09-25", "dor": "2029-09-30", "doj_service": "2009-01-30", "doj_school": "2009-01-30", "emp_code": "XTCJ8807", "mob_no": "9475217459", "qualification": "M.C.A.,B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "COMA", "caste": "OBC-B", "medium": "Bengali", "pan": "AZUPM9342G" },
+  { "sl": 8, "name": "MRINMAYEE CHAKRABORTY", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "127/S;11-01-2010", "level": "LEVEL-15", "cell": "CELL-17", "basic": 68400.0, "da": 12312.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 87212.0, "gpf": 15000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 15200.0, "net": 72012.0, "dob": "1982-02-18", "dor": "2042-02-28", "doj_service": "2007-10-15", "doj_school": "2009-10-27", "emp_code": "MEAB3695", "mob_no": "9732356211", "qualification": "M.A.(Sans),B.Ed", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "Sanskrit", "caste": "Gen", "medium": "Bengali", "pan": "BIYPK2866F" },
+  { "sl": 9, "name": "BIDHAN CHANDRA GHOSH", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "2711/S;08-10-2009", "level": "LEVEL-15", "cell": "CELL-17", "basic": 68400.0, "da": 12312.0, "hra": 8208.0, "ma": 500.0, "addl": 0.0, "gross": 89420.0, "gpf": 5000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 5200.0, "net": 84220.0, "dob": "1983-01-17", "dor": "2043-01-31", "doj_service": "2009-09-01", "doj_school": "2009-09-01", "emp_code": "AXYN2334", "mob_no": "7001316846", "qualification": "M.Sc.(Chem),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "Chemistry", "caste": "Gen", "medium": "Bengali", "pan": "AJXPC4923A" },
+  { "sl": 10, "name": "PARTHA MISHRA", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "M", "approval": "4802/S; 08-12-2017", "level": "LEVEL-11", "cell": "CELL-14", "basic": 49000.0, "da": 8820.0, "hra": 5880.0, "ma": 500.0, "addl": 0.0, "gross": 64200.0, "gpf": 5000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 5200.0, "net": 59000.0, "dob": "1990-02-12", "dor": "2050-02-28", "doj_service": "2013-12-02", "doj_school": "2017-11-16", "emp_code": "AHFT9812", "mob_no": "9475371396", "qualification": "B.A.(Eng),B.Ed", "pay_level_scale": "LEVEL-11-PB-3-7100-37600-GP-RS-4100", "staff_group": "LANGUAGE GROUP", "subject": "English", "caste": "Gen", "medium": "Bengali", "pan": "AQBPG6252D" },
+  { "sl": 11, "name": "SAHADEB BASKEY", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "2309/S; 29-07-2011", "level": "LEVEL-15", "cell": "CELL-16", "basic": 66400.0, "da": 11952.0, "hra": 7968.0, "ma": 500.0, "addl": 0.0, "gross": 86820.0, "gpf": 5000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 5200.0, "net": 81620.0, "dob": "1980-11-21", "dor": "2040-11-30", "doj_service": "2005-05-18", "doj_school": "2011-07-05", "emp_code": "TVZU4697", "mob_no": "9932046355", "qualification": "M.A.(Beng),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "LANGUAGE GROUP", "subject": "Bengali", "caste": "S.T.", "medium": "Bengali", "pan": "BFIPM2250L" },
+  { "sl": 12, "name": "TANMOY CHAKRABORTY", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "2189/S; 25-07-2011", "level": "LEVEL-15", "cell": "CELL-16", "basic": 66400.0, "da": 11952.0, "hra": 7968.0, "ma": 500.0, "addl": 0.0, "gross": 86820.0, "gpf": 8000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 8200.0, "net": 78620.0, "dob": "1982-11-02", "dor": "2042-11-30", "doj_service": "2005-07-05", "doj_school": "2011-07-01", "emp_code": "PTHV6090", "mob_no": "9732010723", "qualification": "M.A.(Eng),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "LANGUAGE GROUP", "subject": "English", "caste": "Gen", "medium": "Bengali", "pan": "AKEPB2239A" },
+  { "sl": 13, "name": "SUJATA MAHATA", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "51/S; 03-01-2014", "level": "LEVEL-15", "cell": "CELL-13", "basic": 60800.0, "da": 10944.0, "hra": 6120.0, "ma": 500.0, "addl": 0.0, "gross": 78364.0, "gpf": 5000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 5200.0, "net": 73164.0, "dob": "1984-03-30", "dor": "2044-03-31", "doj_service": "2010-08-09", "doj_school": "2013-11-29", "emp_code": "XHFX8193", "mob_no": "9474191547", "qualification": "M.A.(Beng),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "LANGUAGE GROUP", "subject": "Bengali", "caste": "Gen", "medium": "Bengali", "pan": "AHFPC8555J" },
+  { "sl": 14, "name": "BELA MAHATA", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "204/S; 16-01-2015", "level": "LEVEL-15", "cell": "CELL-23", "basic": 81700.0, "da": 14706.0, "hra": 9804.0, "ma": 500.0, "addl": 0.0, "gross": 106710.0, "gpf": 30000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 30200.0, "net": 76510.0, "dob": "1974-07-02", "dor": "2034-07-31", "doj_service": "2004-10-14", "doj_school": "2014-12-23", "emp_code": "LPCT9358", "mob_no": "9563514172", "qualification": "M.Sc.(Bot),B.Ed", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "Biology", "caste": "Gen", "medium": "Bengali", "pan": "BFZPM1105F" },
+  { "sl": 15, "name": "PAPIYA MAJI", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "3762/S ;05-10-2018", "level": "LEVEL-15", "cell": "CELL-8", "basic": 52400.0, "da": 9432.0, "hra": 6288.0, "ma": 500.0, "addl": 0.0, "gross": 68620.0, "gpf": 5000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 5200.0, "net": 63420.0, "dob": "1991-05-16", "dor": "2051-05-31", "doj_service": "2018-09-11", "doj_school": "2018-09-11", "emp_code": "AMAF7542", "mob_no": "8101162370", "qualification": "M.A.(Eng),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "English", "caste": "Gen", "medium": "Bengali", "pan": "AMRPM0420D" },
+  { "sl": 16, "name": "SUMANTA MANDAL", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "3762/S05-10-2018", "level": "LEVEL-15", "cell": "CELL-8", "basic": 52400.0, "da": 9432.0, "hra": 6288.0, "ma": 500.0, "addl": 0.0, "gross": 68620.0, "gpf": 6000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 6200.0, "net": 62420.0, "dob": "1990-12-03", "dor": "2050-12-31", "doj_service": "2018-09-12", "doj_school": "2018-09-12", "emp_code": "KAZD4948", "mob_no": "8436065805", "qualification": "M.Sc.(Math),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "Mathematics", "caste": "S.C", "medium": "Bengali", "pan": "DAQPM3007N" },
+  { "sl": 17, "name": "SAMPA PATI", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "F", "approval": "278/S; 28-01-2019", "level": "LEVEL-11", "cell": "CELL-7", "basic": 39900.0, "da": 7182.0, "hra": 4788.0, "ma": 500.0, "addl": 0.0, "gross": 52370.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 42170.0, "dob": "1992-03-26", "dor": "2052-03-31", "doj_service": "2019-01-09", "doj_school": "2019-01-09", "emp_code": "VWYY4294", "mob_no": "6294548679", "qualification": "B.A(ENG), B.ED", "pay_level_scale": "LEVEL-11-PB-3-7100-37600-GP-RS-4100", "staff_group": "LANGUAGE GROUP", "subject": "English", "caste": "Gen", "medium": "Bengali", "pan": "CRUPM9554J" },
+  { "sl": 18, "name": "ANTARA GHORAI", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "F", "approval": "543/S; 02-03-2021", "level": "LEVEL-12", "cell": "CELL-22", "basic": 66500.0, "da": 11970.0, "hra": 6240.0, "ma": 500.0, "addl": 0.0, "gross": 85210.0, "gpf": 35000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 35200.0, "net": 50010.0, "dob": "1978-12-07", "dor": "2038-12-31", "doj_service": "2005-04-11", "doj_school": "2021-02-20", "emp_code": "ABAE7411", "mob_no": "9434524410", "qualification": "B.A.(Sans),B.Ed", "pay_level_scale": "LEVEL-12-PB-4-9000-40500-GP-RS-4400", "staff_group": "LANGUAGE GROUP", "subject": "Sanskrit", "caste": "Gen", "medium": "Bengali", "pan": "BAVPD4883N" },
+  { "sl": 19, "name": "MALATI TUDU", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "712/S ;10-03-2021", "level": "LEVEL-15", "cell": "CELL-5", "basic": 48000.0, "da": 8640.0, "hra": 5760.0, "ma": 500.0, "addl": 0.0, "gross": 62900.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 52700.0, "dob": "1992-11-16", "dor": "2052-11-30", "doj_service": "2021-02-26", "doj_school": "2021-02-26", "emp_code": "FBJW5262", "mob_no": "9775601340", "qualification": "M.A.(Santali),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "SANTHALI (PG)", "caste": "ST", "medium": "Santhali", "pan": "BCMPS8344C" },
+  { "sl": 20, "name": "SASANKA SAREN", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "712/S ;10-03-2021", "level": "LEVEL-15", "cell": "CELL-5", "basic": 48000.0, "da": 8640.0, "hra": 5760.0, "ma": 500.0, "addl": 0.0, "gross": 62900.0, "gpf": 6000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 6200.0, "net": 56700.0, "dob": "1994-02-09", "dor": "2054-02-28", "doj_service": "2021-02-26", "doj_school": "2021-02-26", "emp_code": "XOFX4098", "mob_no": "9064795247", "qualification": "M.A.(Santali),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "SANTHALI (PG)", "caste": "ST", "medium": "Santhali", "pan": "AQCPT5082B" },
+  { "sl": 21, "name": "SWAPNA MAHANTI", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "1787/S ;05-10-2021", "level": "LEVEL-15", "cell": "CELL-17", "basic": 68400.0, "da": 12312.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 87212.0, "gpf": 20000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 20200.0, "net": 67012.0, "dob": "1978-10-12", "dor": "2038-10-31", "doj_service": "2009-09-07", "doj_school": "2021-09-24", "emp_code": "NCIZ8216", "mob_no": "7407377173", "qualification": "M.Sc.(Phys),B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "HIGHER SECONDARY SECTION", "subject": "PHYSICS", "caste": "Gen", "medium": "Bengali", "pan": "IFPPS2904B" },
+  { "sl": 22, "name": "KANTI MALLA", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "M", "approval": "2246/S; 24-11-2021", "level": "LEVEL-11", "cell": "CELL-19", "basic": 56900.0, "da": 10242.0, "hra": 6828.0, "ma": 500.0, "addl": 0.0, "gross": 74470.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 64270.0, "dob": "1984-04-06", "dor": "2044-04-30", "doj_service": "2008-10-03", "doj_school": "2021-11-13", "emp_code": "UVJO0237", "mob_no": "9749483481", "qualification": "B.A.; B.PED.", "pay_level_scale": "LEVEL-11-PB-3-7100-37600-GP-RS-4100", "staff_group": "WORK EDUCATION GROUP", "subject": "P.E. ", "caste": "S.C.", "medium": "Bengali", "pan": "BCVPM2034E" },
+  { "sl": 23, "name": "SABYASACHI MANDAL", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "M", "approval": "66/S;06-01-2022", "level": "LEVEL-15", "cell": "CELL-19", "basic": 72600.0, "da": 13068.0, "hra": 8100.0, "ma": 500.0, "addl": 0.0, "gross": 94268.0, "gpf": 6000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 6200.0, "net": 88068.0, "dob": "1982-02-16", "dor": "2042-02-28", "doj_service": "2007-09-20", "doj_school": "2022-01-04", "emp_code": "YHZN6632", "mob_no": "9609556152", "qualification": "M.Sc.,B.Ed.", "pay_level_scale": "LEVEL-15-PB-4-9000-40500-GP-RS-4800", "staff_group": "SCIENCE GROUP", "subject": "PSC/ PURE SC", "caste": "Gen", "medium": "Bengali", "pan": "AXVPM7881P" },
+  { "sl": 24, "name": "SHEPHALI MAJI", "desig": "ASSISTANT TEACHER", "group": "Gr-A", "gender": "F", "approval": "1953/S;04-07-2022", "level": "LEVEL-12", "cell": "CELL-25", "basic": 72700.0, "da": 13086.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 92286.0, "gpf": 30000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 30200.0, "net": 62086.0, "dob": "1977-11-13", "dor": "2037-11-30", "doj_service": "2001-05-02", "doj_school": "2022-06-29", "emp_code": "HWFI9336", "mob_no": "9474502670", "qualification": "B.A. ,B.ED", "pay_level_scale": "LEVEL-12-PB-4-9000-40500-GP-RS-4400", "staff_group": "SOCIAL SCIENCE GROUP", "subject": "Geography", "caste": "S.C.", "medium": "Bengali", "pan": "AUAPM5911A" },
+  { "sl": 25, "name": "DIPTIMAN SAHA", "desig": "ASSISTANT TEACHER", "group": "Gr-B", "gender": "M", "approval": "1954/S;04-07-2022", "level": "LEVEL-11", "cell": "CELL-19", "basic": 56900.0, "da": 10242.0, "hra": 6000.0, "ma": 500.0, "addl": 0.0, "gross": 73642.0, "gpf": 8000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 8200.0, "net": 65442.0, "dob": "1980-03-28", "dor": "2040-03-31", "doj_service": "2008-09-24", "doj_school": "2022-06-29", "emp_code": "JDMU7116", "mob_no": "9732148608", "qualification": "B.A.; B.PED.", "pay_level_scale": "LEVEL-11-PB-3-7100-37600-GP-RS-4100", "staff_group": "WORK EDUCATION GROUP", "subject": "P.E. ", "caste": "S.C.", "medium": "Bengali", "pan": "AHPPM2350M" },
+  { "sl": 26, "name": "TUHIN SUBHRA PATRA", "desig": "LIBRARIAN", "group": "Gr-C", "gender": "M", "approval": "1793/S ;05-10-2021", "level": "LEVEL-10", "cell": "CELL-15", "basic": 48700.0, "da": 8766.0, "hra": 5844.0, "ma": 500.0, "addl": 0.0, "gross": 63810.0, "gpf": 10000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 10200.0, "net": 53610.0, "dob": "1979-01-14", "dor": "2039-01-31", "doj_service": "2012-04-05", "doj_school": "2021-09-17", "emp_code": "VCDS2789", "mob_no": "9932591525", "qualification": "B.A. ; BLIS", "pay_level_scale": "LEVEL-10-PB-3-7100-37600-GP-RS-3900", "staff_group": "N.A.", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "CDPPS3801R" },
+  { "sl": 27, "name": "SUBHENDU KARMAKAR", "desig": "CLERK", "group": "Gr-C", "gender": "M", "approval": "1220/S; 04-05-2000", "level": "LEVEL-7", "cell": "CELL-26", "basic": 51800.0, "da": 9324.0, "hra": 6216.0, "ma": 500.0, "addl": 0.0, "gross": 67840.0, "gpf": 35000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 35200.0, "net": 32640.0, "dob": "1966-10-07", "dor": "2026-10-31", "doj_service": "2000-03-14", "doj_school": "2000-03-14", "emp_code": "YTTP2941", "mob_no": "9475347007", "qualification": "B.A.", "pay_level_scale": "LEVEL-7-PB-2-.5400-25200- GP-RS-2900", "staff_group": "N.A.", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "BUJPP1772N" },
+  { "sl": 28, "name": "TAPAN KUMAR DIYASI", "desig": "GR.D-STAFF", "group": "Gr-D", "gender": "M", "approval": "1086/S; 03-05-1995", "level": "LEVEL-2", "cell": "CELL-28", "basic": 39000.0, "da": 7020.0, "hra": 4680.0, "ma": 500.0, "addl": 0.0, "gross": 51200.0, "gpf": 15000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 15200.0, "net": 36000.0, "dob": "1974-02-25", "dor": "2034-02-28", "doj_service": "1995-03-14", "doj_school": "1995-03-14", "emp_code": "VTXO9847", "mob_no": "9732188801", "qualification": "VIII-Passed", "pay_level_scale": "LEVEL-2-PB-1:4900-16200-GP-RS-1800", "staff_group": "N.A.", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "EMUPD3676R" },
+  { "sl": 29, "name": "NIRANJAN MURMU", "desig": "GR.D-STAFF", "group": "Gr-D", "gender": "M", "approval": "1403/S; 23-07-1998", "level": "LEVEL-2", "cell": "CELL-27", "basic": 37900.0, "da": 6822.0, "hra": 4548.0, "ma": 500.0, "addl": 0.0, "gross": 49770.0, "gpf": 8000.0, "ptax": 200.0, "itax": 0.0, "total_ded": 8200.0, "net": 41570.0, "dob": "1976-01-01", "dor": "2035-12-31", "doj_service": "1998-05-12", "doj_school": "1998-05-12", "emp_code": "BBGV1929", "mob_no": "9641298955", "qualification": "VIII-Passed", "pay_level_scale": "LEVEL-2-PB-1:4900-16200-GP-RS-1800", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "BJWPD3889E" },
+  { "sl": 30, "name": "PRAKASH SARDAR", "desig": "GR.D-LAB ATTENDANT", "group": "Gr-D", "gender": "M", "approval": "4848/S; 31-12-2012", "level": "LEVEL-1", "cell": "CELL-16", "basic": 26400.0, "da": 4752.0, "hra": 3168.0, "ma": 500.0, "addl": 0.0, "gross": 34820.0, "gpf": 2000.0, "ptax": 150.0, "itax": 0.0, "total_ded": 2150.0, "net": 32670.0, "dob": "1985-07-27", "dor": "2045-07-31", "doj_service": "2012-11-21", "doj_school": "2012-11-21", "emp_code": "PCHJ4347", "mob_no": "9002374924", "qualification": "M.P.", "pay_level_scale": "LEVEL-1-PB-1:4900-16200-GP-RS-1700", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "ERDPS1092G" }
+];
 
+// Monthwise storage helpers
 function parseMonthPickerValue(val) {
   if (!val) return "July-2026";
   const [year, monthNum] = val.split('-');
-  return `${MONTH_NAMES[parseInt(monthNum,10)-1] || "July"}-${year}`;
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const mName = months[parseInt(monthNum, 10) - 1] || "July";
+  return `${mName}-${year}`;
 }
 function monthDisplayToISO(monthStr) {
   const [month, year] = monthStr.split('-');
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const idx = MONTH_NAMES.indexOf(month);
   return idx >= 0 ? `${year}-${String(idx+1).padStart(2,'0')}` : '2026-07';
 }
 function formatMonthPickerToDisplay(val) {
   if (!val) return "July 2026";
   const [year, monthNum] = val.split('-');
-  return `${MONTH_NAMES[parseInt(monthNum,10)-1] || "July"} ${year}`;
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${months[parseInt(monthNum,10)-1] || "July"} ${year}`;
 }
 function getStorageKey(monthStr) {
   monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
   return 'TFHS_SALARY_MONTH_' + monthStr;
 }
+// Fixed 12-month payroll cycle (FY 2026-27: April-2026 to March-2027).
+// Assumption: school salary FY runs April-March, matching the FY2026-27 income tax tool.
+const FY_MONTHS_12 = ["April-2026","May-2026","June-2026","July-2026","August-2026","September-2026",
+  "October-2026","November-2026","December-2026","January-2027","February-2027","March-2027"];
+
+function monthKeyToIndex(m) {
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const [mon, yr] = m.split('-');
+  return parseInt(yr, 10) * 12 + MONTH_NAMES.indexOf(mon);
+}
+
 function getSavedMonths() {
-  const arr = [];
-  for (let i=0;i<localStorage.length;i++) {
+  const set = new Set(FY_MONTHS_12);
+  // Also surface any legacy/extra months already stored (e.g. March-2026 baseline)
+  for (let i=0; i<localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith('TFHS_SALARY_MONTH_')) arr.push(k.substring('TFHS_SALARY_MONTH_'.length));
+    if (k && k.startsWith('TFHS_SALARY_MONTH_')) set.add(k.substring('TFHS_SALARY_MONTH_'.length));
   }
-  if (!arr.includes('July-2026')) arr.push('July-2026');
-  return arr.sort((a,b)=>{
-    const da=new Date(monthDisplayToISO(a)+'-01'), db=new Date(monthDisplayToISO(b)+'-01');
-    return da-db;
-  });
+  return Array.from(set).sort((a, b) => monthKeyToIndex(a) - monthKeyToIndex(b));
+}
+
+// Finds the most recent month (chronologically before monthStr) that has saved data,
+// so a freshly-opened month starts from the last entered figures instead of a blank/default set.
+function findPreviousMonthWithData(monthStr) {
+  const target = monthKeyToIndex(monthStr);
+  let bestKey = null, bestIdx = -Infinity;
+  for (let i=0; i<localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('TFHS_SALARY_MONTH_')) {
+      const m = k.substring('TFHS_SALARY_MONTH_'.length);
+      const idx = monthKeyToIndex(m);
+      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
+    }
+  }
+  return bestKey ? json.parse(localStorage.getItem(getStorageKey(bestKey))) : null;
 }
 function populateMonthDropdowns() {
-  const months=getSavedMonths();
-  const main=document.getElementById('cfgMonthPicker');
+  const months = getSavedMonths();
+  const main = document.getElementById('cfgMonthPicker');
   const current = main.value || '2026-07';
-  main.innerHTML=months.map(m=>`<option value="${monthDisplayToISO(m)}">${m}</option>`).join('');
-  main.value=months.includes(parseMonthPickerValue(current)) ? current : monthDisplayToISO(months[months.length-1]);
-  ['audit-month-a','audit-month-b'].forEach((id,idx)=>{
-    const el=document.getElementById(id); if(!el) return;
-    const old=el.value;
-    el.innerHTML=months.map(m=>`<option value="${m}">${m}</option>`).join('');
-    if (months.includes(old)) el.value=old;
-    else el.value=months[Math.max(0,months.length-1-idx)];
+  main.innerHTML = months.map(m => `<option value="${monthDisplayToISO(m)}">${m.replace('-', ' ')}</option>`).join('');
+  
+  const curDisp = parseMonthPickerValue(current);
+  if (months.includes(curDisp)) {
+    main.value = monthDisplayToISO(curDisp);
+  } else {
+    main.value = monthDisplayToISO(months[months.length - 1]);
+  }
+
+  ['audit-month-a', 'audit-month-b'].forEach((id, idx) => {
+    const el = document.getElementById(id); if (!el) return;
+    const old = el.value;
+    el.innerHTML = months.map(m => `<option value="${m}">${m.replace('-', ' ')}</option>`).join('');
+    if (months.includes(old)) el.value = old;
+    else el.value = months[Math.max(0, months.length - 1 - idx)];
   });
 }
+
 let staffData = [];
 function loadMonthData(monthStr) {
-  const loaded=localStorage.getItem(getStorageKey(monthStr));
-  return loaded ? json.parse(loaded) : json.parse(json.stringify(DEFAULT_STAFF));
+  const loaded = localStorage.getItem(getStorageKey(monthStr));
+  if (loaded) return json.parse(loaded);
+  if (monthStr === 'March-2026') return json.parse(json.stringify(DEFAULT_MARCH_STAFF));
+  if (monthStr === 'July-2026') return json.parse(json.stringify(DEFAULT_STAFF));
+  // Not saved yet: carry forward the nearest earlier month's figures so entry starts warm.
+  const carried = findPreviousMonthWithData(monthStr);
+  if (carried) return json.parse(json.stringify(carried));
+  return json.parse(json.stringify(DEFAULT_STAFF));
 }
+
 function onMonthPickerChange() {
-  const monthStr=parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
-  document.getElementById('cfgMonth').value=monthStr;
-  staffData=loadMonthData(monthStr);
+  const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  document.getElementById('cfgMonth').value = monthStr;
+  staffData = loadMonthData(monthStr);
   renderAll();
 }
+
 function saveMonthData() {
-  const monthStr=parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   localStorage.setItem(getStorageKey(monthStr), json.stringify(staffData));
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
+
 function getStaffForMonth(monthStr) { return loadMonthData(monthStr); }
 
 function numberToWordsINR(amount) {
@@ -1244,6 +1325,65 @@ function exportDataJSON() {
   document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
 }
 
+// Bundles all 12 months of the payroll cycle (plus any legacy saved months) into ONE JSON file.
+function exportAllMonthsJSON() {
+  const months = getSavedMonths();
+  const bundle = {
+    _meta: {
+      school: "TALDANGRA FULMATI HIGH SCHOOL [H.S.]",
+      type: "TFHS_SALARY_ALL_MONTHS",
+      exportedAt: new Date().toISOString(),
+      months: months
+    },
+    months: {}
+  };
+  months.forEach(m => { bundle.months[m] = loadMonthData(m); });
+
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(bundle, null, 2));
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute("href", dataStr);
+  downloadAnchor.setAttribute("download", `TFHS_Salary_All_Months_${new Date().toISOString().slice(0,10)}.json`);
+  document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
+}
+
+// Restores all months from a single combined JSON file (created by exportAllMonthsJSON,
+// or any object shaped like { "Month-YYYY": [...staff], ... } / { months: { "Month-YYYY": [...] } }).
+function importAllMonthsJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parsed = json.parse(e.target.result);
+      const monthsObj = (parsed && parsed.months && typeof parsed.months === 'object') ? parsed.months : parsed;
+      if (!monthsObj || typeof monthsObj !== 'object') {
+        alert("Invalid JSON format. Expected month-wise staff data.");
+        return;
+      }
+      let count = 0;
+      Object.keys(monthsObj).forEach(monthKey => {
+        const arr = monthsObj[monthKey];
+        if (Array.isArray(arr)) {
+          localStorage.setItem(getStorageKey(monthKey), json.stringify(arr));
+          count++;
+        }
+      });
+      if (count === 0) {
+        alert("No valid month entries found in the file.");
+        return;
+      }
+      populateMonthDropdowns();
+      const main = document.getElementById('cfgMonthPicker');
+      staffData = loadMonthData(parseMonthPickerValue(main.value));
+      renderAll();
+      alert(`Successfully imported ${count} month(s) of staff data!`);
+    } catch (err) {
+      alert("Error parsing JSON file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
 function fmtAudit(n){ return (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function renderAudit(){
   const a=document.getElementById('audit-month-a'), b=document.getElementById('audit-month-b');
@@ -1292,10 +1432,13 @@ window.addEventListener('DOMContentLoaded', () => {
   if (!localStorage.getItem(getStorageKey('July-2026'))) {
     localStorage.setItem(getStorageKey('July-2026'), json.stringify(DEFAULT_STAFF));
   }
+  if (!localStorage.getItem(getStorageKey('March-2026'))) {
+    localStorage.setItem(getStorageKey('March-2026'), json.stringify(DEFAULT_MARCH_STAFF));
+  }
   populateMonthDropdowns();
-  const main=document.getElementById('cfgMonthPicker');
-  main.value=main.value || '2026-07';
-  staffData=loadMonthData(parseMonthPickerValue(main.value));
+  const main = document.getElementById('cfgMonthPicker');
+  main.value = main.value || '2026-07';
+  staffData = loadMonthData(parseMonthPickerValue(main.value));
   renderAll();
 });
 </script>
