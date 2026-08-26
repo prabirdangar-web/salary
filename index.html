@@ -743,16 +743,72 @@ function loadMonthData(monthStr) {
   return json.parse(json.stringify(DEFAULT_STAFF));
 }
 
+// Monthwise storage for the top control-bar settings (DA rate, HRA mode/cap, Medical Allow, P.Tax mode).
+// These used to live only in the DOM, so switching months left the current on-screen values in place
+// and silently recalculated older/newer months with whatever DA etc. happened to be typed in at the time.
+const DEFAULT_CONFIG = { da: 18, hraMode: 'individual', hraMax: 12000, ma: 500, ptaxMode: 'auto' };
+
+function getConfigStorageKey(monthStr) {
+  monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
+  return 'TFHS_CONFIG_MONTH_' + monthStr;
+}
+
+function findPreviousMonthConfig(monthStr) {
+  const target = monthKeyToIndex(monthStr);
+  let bestKey = null, bestIdx = -Infinity;
+  for (let i=0; i<localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('TFHS_CONFIG_MONTH_')) {
+      const m = k.substring('TFHS_CONFIG_MONTH_'.length);
+      const idx = monthKeyToIndex(m);
+      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
+    }
+  }
+  return bestKey ? json.parse(localStorage.getItem(getConfigStorageKey(bestKey))) : null;
+}
+
+function loadMonthConfig(monthStr) {
+  const loaded = localStorage.getItem(getConfigStorageKey(monthStr));
+  if (loaded) return json.parse(loaded);
+  // Not saved yet: carry forward the nearest earlier month's settings (DA/HRA/etc. rarely change
+  // month to month) instead of silently defaulting or leaving whatever is currently on screen.
+  const carried = findPreviousMonthConfig(monthStr);
+  if (carried) return json.parse(json.stringify(carried));
+  return json.parse(json.stringify(DEFAULT_CONFIG));
+}
+
+function saveMonthConfig(monthStr) {
+  const cfg = {
+    da: parseFloat(document.getElementById('cfgDA').value) || 18,
+    hraMode: document.getElementById('cfgHRAMode').value,
+    hraMax: parseFloat(document.getElementById('cfgHRAMax').value) || 12000,
+    ma: parseFloat(document.getElementById('cfgMA').value) || 500,
+    ptaxMode: document.getElementById('cfgPTaxMode').value
+  };
+  localStorage.setItem(getConfigStorageKey(monthStr), json.stringify(cfg));
+  return cfg;
+}
+
+function applyConfigToControls(cfg) {
+  document.getElementById('cfgDA').value = cfg.da;
+  document.getElementById('cfgHRAMode').value = cfg.hraMode;
+  document.getElementById('cfgHRAMax').value = cfg.hraMax;
+  document.getElementById('cfgMA').value = cfg.ma;
+  document.getElementById('cfgPTaxMode').value = cfg.ptaxMode;
+}
+
 function onMonthPickerChange() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
   staffData = loadMonthData(monthStr);
+  applyConfigToControls(loadMonthConfig(monthStr));
   renderAll();
 }
 
 function saveMonthData() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   localStorage.setItem(getStorageKey(monthStr), json.stringify(staffData));
+  saveMonthConfig(monthStr);
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
@@ -1329,6 +1385,8 @@ function resetToDefault() {
   if (confirm(`Reset staff records for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)} to default?`)) {
     staffData = json.parse(json.stringify(DEFAULT_STAFF));
     localStorage.removeItem(getStorageKey());
+    localStorage.removeItem(getConfigStorageKey());
+    applyConfigToControls(json.parse(json.stringify(DEFAULT_CONFIG)));
     renderAll();
   }
 }
@@ -1353,9 +1411,10 @@ function exportAllMonthsJSON() {
       exportedAt: new Date().toISOString(),
       months: months
     },
-    months: {}
+    months: {},
+    configs: {}
   };
-  months.forEach(m => { bundle.months[m] = loadMonthData(m); });
+  months.forEach(m => { bundle.months[m] = loadMonthData(m); bundle.configs[m] = loadMonthConfig(m); });
 
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(bundle, null, 2));
   const downloadAnchor = document.createElement('a');
@@ -1366,6 +1425,7 @@ function exportAllMonthsJSON() {
 
 // Restores all months from a single combined JSON file (created by exportAllMonthsJSON,
 // or any object shaped like { "Month-YYYY": [...staff], ... } / { months: { "Month-YYYY": [...] } }).
+// A sibling "configs" object (if present) restores each month's DA/HRA/MA/P.Tax-mode settings too.
 function importAllMonthsJSON(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -1374,6 +1434,7 @@ function importAllMonthsJSON(event) {
     try {
       const parsed = json.parse(e.target.result);
       const monthsObj = (parsed && parsed.months && typeof parsed.months === 'object') ? parsed.months : parsed;
+      const configsObj = (parsed && parsed.configs && typeof parsed.configs === 'object') ? parsed.configs : {};
       if (!monthsObj || typeof monthsObj !== 'object') {
         alert("Invalid JSON format. Expected month-wise staff data.");
         return;
@@ -1386,6 +1447,12 @@ function importAllMonthsJSON(event) {
           count++;
         }
       });
+      Object.keys(configsObj).forEach(monthKey => {
+        const cfg = configsObj[monthKey];
+        if (cfg && typeof cfg === 'object') {
+          localStorage.setItem(getConfigStorageKey(monthKey), json.stringify(cfg));
+        }
+      });
       if (count === 0) {
         alert("No valid month entries found in the file.");
         return;
@@ -1393,6 +1460,7 @@ function importAllMonthsJSON(event) {
       populateMonthDropdowns();
       const main = document.getElementById('cfgMonthPicker');
       staffData = loadMonthData(parseMonthPickerValue(main.value));
+      applyConfigToControls(loadMonthConfig(parseMonthPickerValue(main.value)));
       renderAll();
       alert(`Successfully imported ${count} month(s) of staff data!`);
     } catch (err) {
@@ -1457,6 +1525,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const main = document.getElementById('cfgMonthPicker');
   main.value = main.value || '2026-07';
   staffData = loadMonthData(parseMonthPickerValue(main.value));
+  applyConfigToControls(loadMonthConfig(parseMonthPickerValue(main.value)));
   renderAll();
 });
 </script>
