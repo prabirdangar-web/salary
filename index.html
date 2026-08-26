@@ -593,6 +593,27 @@ function dayBeforeISO(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
+// Calendar-accurate "X years, Y months, Z days" between two YYYY-MM-DD dates (inclusive of the end date).
+function serviceDuration(fromISO, toISO) {
+  if (!fromISO || !toISO) return 'N.A.';
+  const from = new Date(fromISO + 'T00:00:00');
+  const to = new Date(toISO + 'T00:00:00');
+  if (isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) return 'N.A.';
+  let years = to.getFullYear() - from.getFullYear();
+  let months = to.getMonth() - from.getMonth();
+  let days = to.getDate() - from.getDate();
+  if (days < 0) {
+    months -= 1;
+    const lastDayOfPrevMonth = new Date(to.getFullYear(), to.getMonth(), 0).getDate();
+    days += lastDayOfPrevMonth;
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  return `${years} years, ${months} months, ${days} days.`;
+}
+
 const DEFAULT_STAFF = [
   { "sl": 1, "name": "PRABIR KUMAR DANGAR", "desig": "HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2252/S; 02-08-2019", "level": "LEVEL-16", "cell": "CELL-22", "basic": 104400.0, "da": 18792.0, "hra": 12000.0, "ma": 500.0, "addl": 500.0, "gross": 136192.0, "gpf": 40000.0, "ptax": 200.0, "itax": 12000.0, "total_ded": 52200.0, "net": 83992.0, "dob": "1969-04-10", "dor": "2029-04-30", "doj_service": "1997-10-06", "doj_school": "2019-07-25", "emp_code": "JVMK0539", "mob_no": "9933035811", "qualification": "M.Sc.(Math),B.Ed.", "pay_level_scale": "LEVEL-16-PB-4-9000-40500-GP-RS-5400", "staff_group": "HEADMASTER", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "AHGPD9070Q" },
   { "sl": 2, "name": "SWAPAN KUMAR MAJI", "desig": "ASSISTANT HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2540/S; 31-07-1997", "level": "LEVEL-14", "cell": "CELL-32", "basic": 99800.0, "da": 17964.0, "hra": 11976.0, "ma": 500.0, "addl": 500.0, "gross": 130740.0, "gpf": 30000.0, "ptax": 200.0, "itax": 10000.0, "total_ded": 40200.0, "net": 90540.0, "dob": "1970-11-25", "dor": "2030-11-30", "doj_service": "1992-01-01", "doj_school": "1997-06-28", "emp_code": "OTCJ3577", "mob_no": "9434521097", "qualification": "B.A(Hons).,B.Ed.", "pay_level_scale": "LEVEL-14-PB-4-9000-40500-GP-RS-4700", "staff_group": "SOCIAL SCIENCE GROUP", "subject": "Geography", "caste": "S.C.", "medium": "Bengali", "pan": "ADJPG0083H" },
@@ -1225,7 +1246,7 @@ function renderLPC() {
       <div class="lpc-row"><strong>6. Period of service:</strong> From ${formatDateDDMMYYYY(emp.doj_service)} to ${releaseDateFormatted}</div>
       <div class="lpc-row" style="padding-left: 15px;">
         a. Prior to joining this school: ${priorSchoolRow}<br>
-        b. In this school: From ${formatDateDDMMYYYY(emp.doj_school)} to ${releaseDateFormatted} [ Total Length of Service: ${emp.exp_total || '13 years, 4 months, 12 days.'} ]
+        b. In this school: From ${formatDateDDMMYYYY(emp.doj_school)} to ${releaseDateFormatted} [ Total Length of Service: ${serviceDuration(emp.doj_school, releaseDateISO)} ]
       </div>
       <div class="lpc-row"><strong>7. Reason for leaving the school:</strong> ${reason}</div>
       <div class="lpc-row"><strong>8. Date of Birth:</strong> ${formatDateDDMMYYYY(emp.dob)}</div>
