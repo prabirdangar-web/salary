@@ -251,7 +251,7 @@
   <div class="control-group">
     <label>P.Tax Mode</label>
     <select id="cfgPTaxMode" onchange="renderAll()">
-      <option value="auto">Auto (WB Slabs)</option>
+      <option value="auto">Auto (WB Slabs; new rule from Oct-2026)</option>
       <option value="manual">Manual Override</option>
     </select>
   </div>
@@ -786,7 +786,8 @@ function numberToWordsINR(amount) {
   return parts.join(" ") + " Only";
 }
 
-function calculateWBPtax(gross) {
+// P.Tax slab table applicable for July-2026 through September-2026 (unchanged legacy WB slabs).
+function calculateWBPtaxOld(gross) {
   if (gross <= 10000) return 0;
   if (gross <= 15000) return 110;
   if (gross <= 25000) return 130;
@@ -794,12 +795,29 @@ function calculateWBPtax(gross) {
   return 200;
 }
 
-function getCalculatedStaff(emp) {
+// New P.Tax slab table applicable from October-2026 onward.
+function calculateWBPtaxNew(gross) {
+  if (gross <= 20000) return 0;
+  if (gross <= 30000) return 100;
+  if (gross <= 50000) return 140;
+  if (gross <= 100000) return 170;
+  return 208;
+}
+
+// Cutover point: any month before October-2026 uses the old table; October-2026 onward uses the new table.
+const PTAX_NEW_RULE_FROM_IDX = monthKeyToIndex('October-2026');
+function calculateWBPtax(gross, monthStr) {
+  const idx = monthKeyToIndex(monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value));
+  return idx >= PTAX_NEW_RULE_FROM_IDX ? calculateWBPtaxNew(gross) : calculateWBPtaxOld(gross);
+}
+
+function getCalculatedStaff(emp, monthStr) {
   const daRate = parseFloat(document.getElementById('cfgDA').value) || 18;
   const hraMode = document.getElementById('cfgHRAMode').value;
   const hraMax = parseFloat(document.getElementById('cfgHRAMax').value) || 12000;
   const maAmt = parseFloat(document.getElementById('cfgMA').value) || 500;
   const ptaxMode = document.getElementById('cfgPTaxMode').value;
+  const effMonth = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   
   const basic = parseFloat(emp.basic) || 0;
   const addl = parseFloat(emp.addl) || 0;
@@ -819,7 +837,7 @@ function getCalculatedStaff(emp) {
   
   let ptax = 0;
   if (ptaxMode === 'auto') {
-    ptax = calculateWBPtax(gross);
+    ptax = calculateWBPtax(gross, effMonth);
   } else {
     ptax = parseFloat(emp.ptax) || 0;
   }
@@ -1395,7 +1413,7 @@ function renderAudit(){
   da.forEach((raw,i)=>{
     const key=(raw.emp_code||raw.name||'').toString().toUpperCase();
     const eB=mapB.get(key)||{};
-    const A=getCalculatedStaff(raw), B=getCalculatedStaff(eB);
+    const A=getCalculatedStaff(raw, ma), B=getCalculatedStaff(eB, mb);
     rows.push({i:i+1,A,B,diff:(B.calculatedNet||0)-(A.calculatedNet||0)});
   });
   document.getElementById('audit-title-a').textContent=ma;
