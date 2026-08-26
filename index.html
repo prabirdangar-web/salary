@@ -584,6 +584,15 @@ function formatDateDDMMYYYY(dateStr) {
   return dateStr;
 }
 
+// One calendar day before a YYYY-MM-DD date string, e.g. for "service ended the day before joining here".
+function dayBeforeISO(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 const DEFAULT_STAFF = [
   { "sl": 1, "name": "PRABIR KUMAR DANGAR", "desig": "HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2252/S; 02-08-2019", "level": "LEVEL-16", "cell": "CELL-22", "basic": 104400.0, "da": 18792.0, "hra": 12000.0, "ma": 500.0, "addl": 500.0, "gross": 136192.0, "gpf": 40000.0, "ptax": 200.0, "itax": 12000.0, "total_ded": 52200.0, "net": 83992.0, "dob": "1969-04-10", "dor": "2029-04-30", "doj_service": "1997-10-06", "doj_school": "2019-07-25", "emp_code": "JVMK0539", "mob_no": "9933035811", "qualification": "M.Sc.(Math),B.Ed.", "pay_level_scale": "LEVEL-16-PB-4-9000-40500-GP-RS-5400", "staff_group": "HEADMASTER", "subject": "N.A.", "caste": "Gen", "medium": "Bengali", "pan": "AHGPD9070Q" },
   { "sl": 2, "name": "SWAPAN KUMAR MAJI", "desig": "ASSISTANT HEADMASTER", "group": "Gr-A", "gender": "M", "approval": "2540/S; 31-07-1997", "level": "LEVEL-14", "cell": "CELL-32", "basic": 99800.0, "da": 17964.0, "hra": 11976.0, "ma": 500.0, "addl": 500.0, "gross": 130740.0, "gpf": 30000.0, "ptax": 200.0, "itax": 10000.0, "total_ded": 40200.0, "net": 90540.0, "dob": "1970-11-25", "dor": "2030-11-30", "doj_service": "1992-01-01", "doj_school": "1997-06-28", "emp_code": "OTCJ3577", "mob_no": "9434521097", "qualification": "B.A(Hons).,B.Ed.", "pay_level_scale": "LEVEL-14-PB-4-9000-40500-GP-RS-4700", "staff_group": "SOCIAL SCIENCE GROUP", "subject": "Geography", "caste": "S.C.", "medium": "Bengali", "pan": "ADJPG0083H" },
@@ -1193,6 +1202,17 @@ function renderLPC() {
   const hisHer = isFemale ? 'Her' : 'His';
   const himHer = isFemale ? 'Her' : 'Him';
   
+  // "Prior to joining this school" = service between doj_service (joined teaching service overall)
+  // and doj_school (joined this school), when the two dates differ. Previously this row was a
+  // static "---X---" placeholder regardless of what the staff record actually held.
+  let priorSchoolRow;
+  if (emp.doj_service && emp.doj_school && emp.doj_service !== emp.doj_school) {
+    const priorToISO = dayBeforeISO(emp.doj_school);
+    priorSchoolRow = `From ${formatDateDDMMYYYY(emp.doj_service)} to ${priorToISO ? formatDateDDMMYYYY(priorToISO) : '---------X------'}`;
+  } else {
+    priorSchoolRow = `From ---------X------ to ---------X------ (No prior school; joined service directly here)`;
+  }
+  
   document.getElementById('lpc-container').innerHTML = `
     <div class="lpc-document">
       <div class="lpc-header">
@@ -1204,7 +1224,7 @@ function renderLPC() {
       <div class="lpc-row"><strong>5. a) Date of last increment:</strong> 01-07-2026 &nbsp;&nbsp;&nbsp;&nbsp; <strong>b) Date of next increment:</strong> 01-07-2027</div>
       <div class="lpc-row"><strong>6. Period of service:</strong> From ${formatDateDDMMYYYY(emp.doj_service)} to ${releaseDateFormatted}</div>
       <div class="lpc-row" style="padding-left: 15px;">
-        a. Prior to joining this school: From ---------X------ to ---------X------<br>
+        a. Prior to joining this school: ${priorSchoolRow}<br>
         b. In this school: From ${formatDateDDMMYYYY(emp.doj_school)} to ${releaseDateFormatted} [ Total Length of Service: ${emp.exp_total || '13 years, 4 months, 12 days.'} ]
       </div>
       <div class="lpc-row"><strong>7. Reason for leaving the school:</strong> ${reason}</div>
