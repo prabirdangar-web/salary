@@ -584,30 +584,45 @@ function formatDateDDMMYYYY(dateStr) {
   return dateStr;
 }
 
-// Returns the ISO (yyyy-mm-dd) date that is exactly one day before the given ISO date.
-function subtractOneDayISO(dateStr) {
-  if (!dateStr) return dateStr;
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() - 1);
+// Parses a yyyy-mm-dd string into a UTC-based Date, so date math never shifts by a day
+// due to the local timezone offset (which toISOString()/setDate() are sensitive to).
+function parseISODateUTC(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+// Returns the ISO (yyyy-mm-dd) date that is `n` days after the given ISO date (n may be negative).
+function addDaysISO(dateStr, n) {
+  const d = parseISODateUTC(dateStr);
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
-// Computes the exact years/months/days between two ISO (yyyy-mm-dd) dates and a
-// ready-to-print "X years, Y months, Z days." string. Used for LPC "Length of Service".
+// Returns the ISO (yyyy-mm-dd) date that is exactly one day before the given ISO date.
+function subtractOneDayISO(dateStr) {
+  if (!dateStr) return dateStr;
+  return addDaysISO(dateStr, -1);
+}
+
+// Computes the years/months/days of service between two ISO (yyyy-mm-dd) dates, counting
+// BOTH the from-date and the to-date as served days (standard LPC convention). This is what
+// makes "prior service" + "in this school" add up exactly to the grand total: since the two
+// periods are contiguous (prior ends the day before joining the school), each end is fully
+// counted rather than dropped, so no day is double-counted or lost at the boundary.
 function calcServiceDuration(fromISO, toISO) {
   if (!fromISO || !toISO) return { years: 0, months: 0, days: 0, text: 'N.A.' };
-  const d1 = new Date(fromISO + 'T00:00:00');
-  const d2 = new Date(toISO + 'T00:00:00');
+  const d1 = parseISODateUTC(fromISO);
+  const d2 = parseISODateUTC(addDaysISO(toISO, 1)); // +1 day makes the end date inclusive
   if (isNaN(d1) || isNaN(d2) || d2 < d1) return { years: 0, months: 0, days: 0, text: 'N.A.' };
 
-  let years = d2.getFullYear() - d1.getFullYear();
-  let months = d2.getMonth() - d1.getMonth();
-  let days = d2.getDate() - d1.getDate();
+  let years = d2.getUTCFullYear() - d1.getUTCFullYear();
+  let months = d2.getUTCMonth() - d1.getUTCMonth();
+  let days = d2.getUTCDate() - d1.getUTCDate();
 
   if (days < 0) {
     months -= 1;
     // days in the month before d2's month
-    days += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate();
+    days += new Date(Date.UTC(d2.getUTCFullYear(), d2.getUTCMonth(), 0)).getUTCDate();
   }
   if (months < 0) {
     years -= 1;
