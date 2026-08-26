@@ -251,7 +251,7 @@
   <div class="control-group">
     <label>P.Tax Mode</label>
     <select id="cfgPTaxMode" onchange="renderAll()">
-      <option value="auto">Auto (WB Slabs; new rule from Oct-2026)</option>
+      <option value="auto">Auto (WB Slabs)</option>
       <option value="manual">Manual Override</option>
     </select>
   </div>
@@ -584,34 +584,38 @@ function formatDateDDMMYYYY(dateStr) {
   return dateStr;
 }
 
-// One calendar day before a YYYY-MM-DD date string, e.g. for "service ended the day before joining here".
-function dayBeforeISO(dateStr) {
-  if (!dateStr) return null;
+// Returns the ISO (yyyy-mm-dd) date that is exactly one day before the given ISO date.
+function subtractOneDayISO(dateStr) {
+  if (!dateStr) return dateStr;
   const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d.getTime())) return null;
   d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 
-// Calendar-accurate "X years, Y months, Z days" between two YYYY-MM-DD dates (inclusive of the end date).
-function serviceDuration(fromISO, toISO) {
-  if (!fromISO || !toISO) return 'N.A.';
-  const from = new Date(fromISO + 'T00:00:00');
-  const to = new Date(toISO + 'T00:00:00');
-  if (isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) return 'N.A.';
-  let years = to.getFullYear() - from.getFullYear();
-  let months = to.getMonth() - from.getMonth();
-  let days = to.getDate() - from.getDate();
+// Computes the exact years/months/days between two ISO (yyyy-mm-dd) dates and a
+// ready-to-print "X years, Y months, Z days." string. Used for LPC "Length of Service".
+function calcServiceDuration(fromISO, toISO) {
+  if (!fromISO || !toISO) return { years: 0, months: 0, days: 0, text: 'N.A.' };
+  const d1 = new Date(fromISO + 'T00:00:00');
+  const d2 = new Date(toISO + 'T00:00:00');
+  if (isNaN(d1) || isNaN(d2) || d2 < d1) return { years: 0, months: 0, days: 0, text: 'N.A.' };
+
+  let years = d2.getFullYear() - d1.getFullYear();
+  let months = d2.getMonth() - d1.getMonth();
+  let days = d2.getDate() - d1.getDate();
+
   if (days < 0) {
     months -= 1;
-    const lastDayOfPrevMonth = new Date(to.getFullYear(), to.getMonth(), 0).getDate();
-    days += lastDayOfPrevMonth;
+    // days in the month before d2's month
+    days += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate();
   }
   if (months < 0) {
     years -= 1;
     months += 12;
   }
-  return `${years} years, ${months} months, ${days} days.`;
+
+  const text = `${years} year${years !== 1 ? 's' : ''}, ${months} month${months !== 1 ? 's' : ''}, ${days} day${days !== 1 ? 's' : ''}.`;
+  return { years, months, days, text };
 }
 
 const DEFAULT_STAFF = [
@@ -773,72 +777,16 @@ function loadMonthData(monthStr) {
   return json.parse(json.stringify(DEFAULT_STAFF));
 }
 
-// Monthwise storage for the top control-bar settings (DA rate, HRA mode/cap, Medical Allow, P.Tax mode).
-// These used to live only in the DOM, so switching months left the current on-screen values in place
-// and silently recalculated older/newer months with whatever DA etc. happened to be typed in at the time.
-const DEFAULT_CONFIG = { da: 18, hraMode: 'individual', hraMax: 12000, ma: 500, ptaxMode: 'auto' };
-
-function getConfigStorageKey(monthStr) {
-  monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
-  return 'TFHS_CONFIG_MONTH_' + monthStr;
-}
-
-function findPreviousMonthConfig(monthStr) {
-  const target = monthKeyToIndex(monthStr);
-  let bestKey = null, bestIdx = -Infinity;
-  for (let i=0; i<localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith('TFHS_CONFIG_MONTH_')) {
-      const m = k.substring('TFHS_CONFIG_MONTH_'.length);
-      const idx = monthKeyToIndex(m);
-      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
-    }
-  }
-  return bestKey ? json.parse(localStorage.getItem(getConfigStorageKey(bestKey))) : null;
-}
-
-function loadMonthConfig(monthStr) {
-  const loaded = localStorage.getItem(getConfigStorageKey(monthStr));
-  if (loaded) return json.parse(loaded);
-  // Not saved yet: carry forward the nearest earlier month's settings (DA/HRA/etc. rarely change
-  // month to month) instead of silently defaulting or leaving whatever is currently on screen.
-  const carried = findPreviousMonthConfig(monthStr);
-  if (carried) return json.parse(json.stringify(carried));
-  return json.parse(json.stringify(DEFAULT_CONFIG));
-}
-
-function saveMonthConfig(monthStr) {
-  const cfg = {
-    da: parseFloat(document.getElementById('cfgDA').value) || 18,
-    hraMode: document.getElementById('cfgHRAMode').value,
-    hraMax: parseFloat(document.getElementById('cfgHRAMax').value) || 12000,
-    ma: parseFloat(document.getElementById('cfgMA').value) || 500,
-    ptaxMode: document.getElementById('cfgPTaxMode').value
-  };
-  localStorage.setItem(getConfigStorageKey(monthStr), json.stringify(cfg));
-  return cfg;
-}
-
-function applyConfigToControls(cfg) {
-  document.getElementById('cfgDA').value = cfg.da;
-  document.getElementById('cfgHRAMode').value = cfg.hraMode;
-  document.getElementById('cfgHRAMax').value = cfg.hraMax;
-  document.getElementById('cfgMA').value = cfg.ma;
-  document.getElementById('cfgPTaxMode').value = cfg.ptaxMode;
-}
-
 function onMonthPickerChange() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
   staffData = loadMonthData(monthStr);
-  applyConfigToControls(loadMonthConfig(monthStr));
   renderAll();
 }
 
 function saveMonthData() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   localStorage.setItem(getStorageKey(monthStr), json.stringify(staffData));
-  saveMonthConfig(monthStr);
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
@@ -872,8 +820,7 @@ function numberToWordsINR(amount) {
   return parts.join(" ") + " Only";
 }
 
-// P.Tax slab table applicable for July-2026 through September-2026 (unchanged legacy WB slabs).
-function calculateWBPtaxOld(gross) {
+function calculateWBPtax(gross) {
   if (gross <= 10000) return 0;
   if (gross <= 15000) return 110;
   if (gross <= 25000) return 130;
@@ -881,29 +828,12 @@ function calculateWBPtaxOld(gross) {
   return 200;
 }
 
-// New P.Tax slab table applicable from October-2026 onward.
-function calculateWBPtaxNew(gross) {
-  if (gross <= 20000) return 0;
-  if (gross <= 30000) return 100;
-  if (gross <= 50000) return 140;
-  if (gross <= 100000) return 170;
-  return 208;
-}
-
-// Cutover point: any month before October-2026 uses the old table; October-2026 onward uses the new table.
-const PTAX_NEW_RULE_FROM_IDX = monthKeyToIndex('October-2026');
-function calculateWBPtax(gross, monthStr) {
-  const idx = monthKeyToIndex(monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value));
-  return idx >= PTAX_NEW_RULE_FROM_IDX ? calculateWBPtaxNew(gross) : calculateWBPtaxOld(gross);
-}
-
-function getCalculatedStaff(emp, monthStr) {
+function getCalculatedStaff(emp) {
   const daRate = parseFloat(document.getElementById('cfgDA').value) || 18;
   const hraMode = document.getElementById('cfgHRAMode').value;
   const hraMax = parseFloat(document.getElementById('cfgHRAMax').value) || 12000;
   const maAmt = parseFloat(document.getElementById('cfgMA').value) || 500;
   const ptaxMode = document.getElementById('cfgPTaxMode').value;
-  const effMonth = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   
   const basic = parseFloat(emp.basic) || 0;
   const addl = parseFloat(emp.addl) || 0;
@@ -923,7 +853,7 @@ function getCalculatedStaff(emp, monthStr) {
   
   let ptax = 0;
   if (ptaxMode === 'auto') {
-    ptax = calculateWBPtax(gross, effMonth);
+    ptax = calculateWBPtax(gross);
   } else {
     ptax = parseFloat(emp.ptax) || 0;
   }
@@ -1222,17 +1152,13 @@ function renderLPC() {
   const heShe = isFemale ? 'She' : 'He';
   const hisHer = isFemale ? 'Her' : 'His';
   const himHer = isFemale ? 'Her' : 'Him';
-  
-  // "Prior to joining this school" = service between doj_service (joined teaching service overall)
-  // and doj_school (joined this school), when the two dates differ. Previously this row was a
-  // static "---X---" placeholder regardless of what the staff record actually held.
-  let priorSchoolRow;
-  if (emp.doj_service && emp.doj_school && emp.doj_service !== emp.doj_school) {
-    const priorToISO = dayBeforeISO(emp.doj_school);
-    priorSchoolRow = `From ${formatDateDDMMYYYY(emp.doj_service)} to ${priorToISO ? formatDateDDMMYYYY(priorToISO) : '---------X------'}`;
-  } else {
-    priorSchoolRow = `From ---------X------ to ---------X------ (No prior school; joined service directly here)`;
-  }
+
+  // Section 6: period-of-service breakup, computed from actual dates (not hardcoded).
+  const hasPriorService = !!(emp.doj_service && emp.doj_school && emp.doj_service !== emp.doj_school);
+  const priorEndISO = hasPriorService ? subtractOneDayISO(emp.doj_school) : null;
+  const priorDuration = hasPriorService ? calcServiceDuration(emp.doj_service, priorEndISO) : null;
+  const schoolDuration = calcServiceDuration(emp.doj_school, releaseDateISO);
+  const totalDuration = calcServiceDuration(emp.doj_service, releaseDateISO);
   
   document.getElementById('lpc-container').innerHTML = `
     <div class="lpc-document">
@@ -1243,10 +1169,10 @@ function renderLPC() {
       <div class="lpc-row"><strong>2. Qualification:</strong> ${emp.qualification || 'M.P.'} &nbsp;&nbsp;&nbsp;&nbsp; <strong>3. Designation:</strong> ${emp.desig} &nbsp;&nbsp; (${isFemale ? 'FEMALE' : 'MALE'})</div>
       <div class="lpc-row"><strong>4. Pay Scale a)</strong> ${emp.pay_level_scale || emp.level || 'LEVEL-1'} &nbsp;&nbsp; <strong>b)</strong> ${emp.cell || 'CELL-17'}</div>
       <div class="lpc-row"><strong>5. a) Date of last increment:</strong> 01-07-2026 &nbsp;&nbsp;&nbsp;&nbsp; <strong>b) Date of next increment:</strong> 01-07-2027</div>
-      <div class="lpc-row"><strong>6. Period of service:</strong> From ${formatDateDDMMYYYY(emp.doj_service)} to ${releaseDateFormatted}</div>
+      <div class="lpc-row"><strong>6. Period of service:</strong> From ${formatDateDDMMYYYY(emp.doj_service)} to ${releaseDateFormatted} [ Total Length of Service: ${totalDuration.text} ]</div>
       <div class="lpc-row" style="padding-left: 15px;">
-        a. Prior to joining this school: ${priorSchoolRow}<br>
-        b. In this school: From ${formatDateDDMMYYYY(emp.doj_school)} to ${releaseDateFormatted} [ Total Length of Service: ${serviceDuration(emp.doj_school, releaseDateISO)} ]
+        a. Prior to joining this school: From ${hasPriorService ? formatDateDDMMYYYY(emp.doj_service) : 'N.A.'} to ${hasPriorService ? formatDateDDMMYYYY(priorEndISO) : 'N.A.'}${hasPriorService ? ` [ Total Length of Service: ${priorDuration.text} ]` : ''}<br>
+        b. In this school: From ${formatDateDDMMYYYY(emp.doj_school)} to ${releaseDateFormatted} [ Total Length of Service: ${schoolDuration.text} ]
       </div>
       <div class="lpc-row"><strong>7. Reason for leaving the school:</strong> ${reason}</div>
       <div class="lpc-row"><strong>8. Date of Birth:</strong> ${formatDateDDMMYYYY(emp.dob)}</div>
@@ -1426,8 +1352,6 @@ function resetToDefault() {
   if (confirm(`Reset staff records for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)} to default?`)) {
     staffData = json.parse(json.stringify(DEFAULT_STAFF));
     localStorage.removeItem(getStorageKey());
-    localStorage.removeItem(getConfigStorageKey());
-    applyConfigToControls(json.parse(json.stringify(DEFAULT_CONFIG)));
     renderAll();
   }
 }
@@ -1452,10 +1376,9 @@ function exportAllMonthsJSON() {
       exportedAt: new Date().toISOString(),
       months: months
     },
-    months: {},
-    configs: {}
+    months: {}
   };
-  months.forEach(m => { bundle.months[m] = loadMonthData(m); bundle.configs[m] = loadMonthConfig(m); });
+  months.forEach(m => { bundle.months[m] = loadMonthData(m); });
 
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(bundle, null, 2));
   const downloadAnchor = document.createElement('a');
@@ -1466,7 +1389,6 @@ function exportAllMonthsJSON() {
 
 // Restores all months from a single combined JSON file (created by exportAllMonthsJSON,
 // or any object shaped like { "Month-YYYY": [...staff], ... } / { months: { "Month-YYYY": [...] } }).
-// A sibling "configs" object (if present) restores each month's DA/HRA/MA/P.Tax-mode settings too.
 function importAllMonthsJSON(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -1475,7 +1397,6 @@ function importAllMonthsJSON(event) {
     try {
       const parsed = json.parse(e.target.result);
       const monthsObj = (parsed && parsed.months && typeof parsed.months === 'object') ? parsed.months : parsed;
-      const configsObj = (parsed && parsed.configs && typeof parsed.configs === 'object') ? parsed.configs : {};
       if (!monthsObj || typeof monthsObj !== 'object') {
         alert("Invalid JSON format. Expected month-wise staff data.");
         return;
@@ -1488,12 +1409,6 @@ function importAllMonthsJSON(event) {
           count++;
         }
       });
-      Object.keys(configsObj).forEach(monthKey => {
-        const cfg = configsObj[monthKey];
-        if (cfg && typeof cfg === 'object') {
-          localStorage.setItem(getConfigStorageKey(monthKey), json.stringify(cfg));
-        }
-      });
       if (count === 0) {
         alert("No valid month entries found in the file.");
         return;
@@ -1501,7 +1416,6 @@ function importAllMonthsJSON(event) {
       populateMonthDropdowns();
       const main = document.getElementById('cfgMonthPicker');
       staffData = loadMonthData(parseMonthPickerValue(main.value));
-      applyConfigToControls(loadMonthConfig(parseMonthPickerValue(main.value)));
       renderAll();
       alert(`Successfully imported ${count} month(s) of staff data!`);
     } catch (err) {
@@ -1522,7 +1436,7 @@ function renderAudit(){
   da.forEach((raw,i)=>{
     const key=(raw.emp_code||raw.name||'').toString().toUpperCase();
     const eB=mapB.get(key)||{};
-    const A=getCalculatedStaff(raw, ma), B=getCalculatedStaff(eB, mb);
+    const A=getCalculatedStaff(raw), B=getCalculatedStaff(eB);
     rows.push({i:i+1,A,B,diff:(B.calculatedNet||0)-(A.calculatedNet||0)});
   });
   document.getElementById('audit-title-a').textContent=ma;
@@ -1566,7 +1480,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const main = document.getElementById('cfgMonthPicker');
   main.value = main.value || '2026-07';
   staffData = loadMonthData(parseMonthPickerValue(main.value));
-  applyConfigToControls(loadMonthConfig(parseMonthPickerValue(main.value)));
   renderAll();
 });
 </script>
