@@ -722,6 +722,58 @@ function getStorageKey(monthStr) {
   monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
   return 'TFHS_SALARY_MONTH_' + monthStr;
 }
+function getConfigStorageKey(monthStr) {
+  monthStr = monthStr || parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || "2026-07");
+  return 'TFHS_SALARY_CONFIG_' + monthStr;
+}
+const DEFAULT_CONFIG = { da: 18, hraMode: 'individual', hraMax: 12000, ma: 500, ptaxMode: 'auto' };
+
+// Reads the DA/HRA/MA/P.Tax control values currently shown on screen.
+function getCurrentConfig() {
+  return {
+    da: document.getElementById('cfgDA').value,
+    hraMode: document.getElementById('cfgHRAMode').value,
+    hraMax: document.getElementById('cfgHRAMax').value,
+    ma: document.getElementById('cfgMA').value,
+    ptaxMode: document.getElementById('cfgPTaxMode').value
+  };
+}
+
+// Writes a config object back into the DA/HRA/MA/P.Tax controls (falling back to defaults for any missing field).
+function applyConfig(config) {
+  const c = Object.assign({}, DEFAULT_CONFIG, config || {});
+  document.getElementById('cfgDA').value = c.da;
+  document.getElementById('cfgHRAMode').value = c.hraMode;
+  document.getElementById('cfgHRAMax').value = c.hraMax;
+  document.getElementById('cfgMA').value = c.ma;
+  document.getElementById('cfgPTaxMode').value = c.ptaxMode;
+}
+
+// Finds the most recent earlier month that has a saved config, so a freshly-opened month
+// starts from the last-set rates instead of silently reverting to the hardcoded defaults.
+function findPreviousMonthConfig(monthStr) {
+  const target = monthKeyToIndex(monthStr);
+  let bestKey = null, bestIdx = -Infinity;
+  for (let i=0; i<localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('TFHS_SALARY_CONFIG_')) {
+      const m = k.substring('TFHS_SALARY_CONFIG_'.length);
+      const idx = monthKeyToIndex(m);
+      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
+    }
+  }
+  return bestKey ? JSON.parse(localStorage.getItem(getConfigStorageKey(bestKey))) : null;
+}
+
+// Loads the DA/HRA/MA/P.Tax config saved for this specific month; if this month was never
+// saved, carries forward the nearest earlier saved month's config; otherwise uses defaults.
+function loadMonthConfig(monthStr) {
+  const saved = localStorage.getItem(getConfigStorageKey(monthStr));
+  if (saved) return JSON.parse(saved);
+  const carried = findPreviousMonthConfig(monthStr);
+  if (carried) return carried;
+  return Object.assign({}, DEFAULT_CONFIG);
+}
 // Fixed 12-month payroll cycle (FY 2026-27: April-2026 to March-2027).
 // Assumption: school salary FY runs April-March, matching the FY2026-27 income tax tool.
 const FY_MONTHS_12 = ["April-2026","May-2026","June-2026","July-2026","August-2026","September-2026",
@@ -796,12 +848,14 @@ function onMonthPickerChange() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
   staffData = loadMonthData(monthStr);
+  applyConfig(loadMonthConfig(monthStr));
   renderAll();
 }
 
 function saveMonthData() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   localStorage.setItem(getStorageKey(monthStr), JSON.stringify(staffData));
+  localStorage.setItem(getConfigStorageKey(monthStr), JSON.stringify(getCurrentConfig()));
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
@@ -1413,7 +1467,7 @@ function exportAllMonthsJSON() {
     },
     months: {}
   };
-  months.forEach(m => { bundle.months[m] = loadMonthData(m); });
+  months.forEach(m => { bundle.months[m] = { staff: loadMonthData(m), config: loadMonthConfig(m) }; });
 
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bundle, null, 2));
   const downloadAnchor = document.createElement('a');
@@ -1438,9 +1492,14 @@ function importAllMonthsJSON(event) {
       }
       let count = 0;
       Object.keys(monthsObj).forEach(monthKey => {
-        const arr = monthsObj[monthKey];
-        if (Array.isArray(arr)) {
+        const entry = monthsObj[monthKey];
+        // New shape: { staff: [...], config: {...} }. Legacy shape: a plain staff array.
+        const arr = Array.isArray(entry) ? entry : (entry && Array.isArray(entry.staff) ? entry.staff : null);
+        if (arr) {
           localStorage.setItem(getStorageKey(monthKey), JSON.stringify(arr));
+          if (entry && entry.config) {
+            localStorage.setItem(getConfigStorageKey(monthKey), JSON.stringify(entry.config));
+          }
           count++;
         }
       });
@@ -1451,6 +1510,7 @@ function importAllMonthsJSON(event) {
       populateMonthDropdowns();
       const main = document.getElementById('cfgMonthPicker');
       staffData = loadMonthData(parseMonthPickerValue(main.value));
+      applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
       renderAll();
       alert(`Successfully imported ${count} month(s) of staff data!`);
     } catch (err) {
@@ -1515,6 +1575,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const main = document.getElementById('cfgMonthPicker');
   main.value = main.value || '2026-07';
   staffData = loadMonthData(parseMonthPickerValue(main.value));
+  applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
   renderAll();
 });
 </script>
