@@ -756,7 +756,7 @@ function findPreviousMonthWithData(monthStr) {
       if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
     }
   }
-  return bestKey ? json.parse(localStorage.getItem(getStorageKey(bestKey))) : null;
+  return bestKey ? JSON.parse(localStorage.getItem(getStorageKey(bestKey))) : null;
 }
 function populateMonthDropdowns() {
   const months = getSavedMonths();
@@ -783,13 +783,13 @@ function populateMonthDropdowns() {
 let staffData = [];
 function loadMonthData(monthStr) {
   const loaded = localStorage.getItem(getStorageKey(monthStr));
-  if (loaded) return json.parse(loaded);
-  if (monthStr === 'March-2026') return json.parse(json.stringify(DEFAULT_MARCH_STAFF));
-  if (monthStr === 'July-2026') return json.parse(json.stringify(DEFAULT_STAFF));
+  if (loaded) return JSON.parse(loaded);
+  if (monthStr === 'March-2026') return JSON.parse(JSON.stringify(DEFAULT_MARCH_STAFF));
+  if (monthStr === 'July-2026') return JSON.parse(JSON.stringify(DEFAULT_STAFF));
   // Not saved yet: carry forward the nearest earlier month's figures so entry starts warm.
   const carried = findPreviousMonthWithData(monthStr);
-  if (carried) return json.parse(json.stringify(carried));
-  return json.parse(json.stringify(DEFAULT_STAFF));
+  if (carried) return JSON.parse(JSON.stringify(carried));
+  return JSON.parse(JSON.stringify(DEFAULT_STAFF));
 }
 
 function onMonthPickerChange() {
@@ -801,7 +801,7 @@ function onMonthPickerChange() {
 
 function saveMonthData() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
-  localStorage.setItem(getStorageKey(monthStr), json.stringify(staffData));
+  localStorage.setItem(getStorageKey(monthStr), JSON.stringify(staffData));
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
@@ -835,12 +835,30 @@ function numberToWordsINR(amount) {
   return parts.join(" ") + " Only";
 }
 
-function calculateWBPtax(gross) {
+// WB Professional Tax slab applicable up to September-2026.
+function calculateWBPtaxOld(gross) {
   if (gross <= 10000) return 0;
   if (gross <= 15000) return 110;
   if (gross <= 25000) return 130;
   if (gross <= 40000) return 150;
   return 200;
+}
+
+// Revised WB Professional Tax slab, effective October-2026 onwards.
+function calculateWBPtaxNew(gross) {
+  if (gross <= 20000) return 0;
+  if (gross <= 30000) return 100;
+  if (gross <= 50000) return 140;
+  if (gross <= 100000) return 170;
+  return 208;
+}
+
+// Picks the slab that applies for a given payroll month ("Month-YYYY", e.g. "October-2026").
+// October-2026 and every month after it uses the revised slab; anything before uses the old one.
+function calculateWBPtax(gross, monthStr) {
+  const cutoff = monthKeyToIndex('October-2026');
+  const m = monthStr ? monthKeyToIndex(monthStr) : cutoff; // default to new slab if month unknown
+  return m >= cutoff ? calculateWBPtaxNew(gross) : calculateWBPtaxOld(gross);
 }
 
 function getCalculatedStaff(emp) {
@@ -868,7 +886,9 @@ function getCalculatedStaff(emp) {
   
   let ptax = 0;
   if (ptaxMode === 'auto') {
-    ptax = calculateWBPtax(gross);
+    const pickerVal = document.getElementById('cfgMonthPicker') ? document.getElementById('cfgMonthPicker').value : null;
+    const monthStr = pickerVal ? parseMonthPickerValue(pickerVal) : null;
+    ptax = calculateWBPtax(gross, monthStr);
   } else {
     ptax = parseFloat(emp.ptax) || 0;
   }
@@ -1347,7 +1367,7 @@ function importDataJSON(event) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const imported = json.parse(e.target.result);
+      const imported = JSON.parse(e.target.result);
       if (Array.isArray(imported) && imported.length > 0) {
         staffData = imported;
         saveMonthData();
@@ -1365,7 +1385,7 @@ function importDataJSON(event) {
 
 function resetToDefault() {
   if (confirm(`Reset staff records for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)} to default?`)) {
-    staffData = json.parse(json.stringify(DEFAULT_STAFF));
+    staffData = JSON.parse(JSON.stringify(DEFAULT_STAFF));
     localStorage.removeItem(getStorageKey());
     renderAll();
   }
@@ -1374,7 +1394,7 @@ function resetToDefault() {
 function exportDataJSON() {
   const pickerVal = document.getElementById('cfgMonthPicker').value || "2026-07";
   const displayMonth = parseMonthPickerValue(pickerVal);
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(staffData, null, 2));
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(staffData, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
   downloadAnchor.setAttribute("download", `TFHS_Staff_Salary_${displayMonth}.json`);
@@ -1395,7 +1415,7 @@ function exportAllMonthsJSON() {
   };
   months.forEach(m => { bundle.months[m] = loadMonthData(m); });
 
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json.stringify(bundle, null, 2));
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bundle, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
   downloadAnchor.setAttribute("download", `TFHS_Salary_All_Months_${new Date().toISOString().slice(0,10)}.json`);
@@ -1410,7 +1430,7 @@ function importAllMonthsJSON(event) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const parsed = json.parse(e.target.result);
+      const parsed = JSON.parse(e.target.result);
       const monthsObj = (parsed && parsed.months && typeof parsed.months === 'object') ? parsed.months : parsed;
       if (!monthsObj || typeof monthsObj !== 'object') {
         alert("Invalid JSON format. Expected month-wise staff data.");
@@ -1420,7 +1440,7 @@ function importAllMonthsJSON(event) {
       Object.keys(monthsObj).forEach(monthKey => {
         const arr = monthsObj[monthKey];
         if (Array.isArray(arr)) {
-          localStorage.setItem(getStorageKey(monthKey), json.stringify(arr));
+          localStorage.setItem(getStorageKey(monthKey), JSON.stringify(arr));
           count++;
         }
       });
@@ -1486,10 +1506,10 @@ function renderAll() {
 
 window.addEventListener('DOMContentLoaded', () => {
   if (!localStorage.getItem(getStorageKey('July-2026'))) {
-    localStorage.setItem(getStorageKey('July-2026'), json.stringify(DEFAULT_STAFF));
+    localStorage.setItem(getStorageKey('July-2026'), JSON.stringify(DEFAULT_STAFF));
   }
   if (!localStorage.getItem(getStorageKey('March-2026'))) {
-    localStorage.setItem(getStorageKey('March-2026'), json.stringify(DEFAULT_MARCH_STAFF));
+    localStorage.setItem(getStorageKey('March-2026'), JSON.stringify(DEFAULT_MARCH_STAFF));
   }
   populateMonthDropdowns();
   const main = document.getElementById('cfgMonthPicker');
