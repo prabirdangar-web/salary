@@ -928,7 +928,7 @@ function getCalculatedStaff(emp) {
   
   let hra = 0;
   if (hraMode === '12') {
-    hra = Math.round((basic * 12) / 1000) * 10; // round to nearest Rs. 10
+    hra = Math.round((basic * 12) / 100);
     if (hra > hraMax) hra = hraMax;
   } else {
     hra = parseFloat(emp.hra) || 0;
