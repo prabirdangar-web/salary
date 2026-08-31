@@ -1039,6 +1039,8 @@ function getCalculatedStaff(emp) {
   
   let hra = 0;
   if (hraMode === '12') {
+    // HRA = exactly 12% of Basic, rounded to the nearest rupee.
+    // Do NOT round/adjust HRA to the next ₹10 (or any other multiple).
     hra = Math.round((basic * 12) / 100);
     if (hra > hraMax) hra = hraMax;
   } else {
