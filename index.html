@@ -212,6 +212,45 @@
 </head>
 <body>
 
+<div id="syncStatus" style="position:fixed;bottom:10px;right:10px;background:#0f172a;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;z-index:999;box-shadow:0 2px 6px rgba(0,0,0,.2);" class="no-print">Connecting…</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCiqQFsnbSi6eCgUI_W3NTybzIkRmCI_54",
+    authDomain: "tfhs-portal.firebaseapp.com",
+    projectId: "tfhs-portal",
+    storageBucket: "tfhs-portal.firebasestorage.app",
+    messagingSenderId: "316041012204",
+    appId: "1:316041012204:web:c0b52bc796c5ac173716c9"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+  const salaryDocRef = db.collection('tfhs').doc('salaryPortal');
+</script>
+
+<!-- ADMIN LOGIN PANEL (view-only for everyone unless logged in) -->
+<div id="authPanel" class="no-print" style="position:fixed;top:10px;right:10px;z-index:999;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:12px;width:210px;">
+  <div id="authLoggedOut">
+    <div style="font-weight:700;margin-bottom:6px;">🔒 View Only Mode</div>
+    <input type="email" id="authEmail" placeholder="Admin email" style="width:100%;margin-bottom:5px;padding:5px;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;">
+    <input type="password" id="authPass" placeholder="Password" style="width:100%;margin-bottom:5px;padding:5px;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;" onkeydown="if(event.key==='Enter')adminLogin();">
+    <button class="btn btn-primary" style="width:100%;padding:7px;font-size:11px;" onclick="adminLogin()">Login to Edit</button>
+    <div id="authError" style="color:#b91c1c;font-size:10.5px;margin-top:4px;"></div>
+  </div>
+  <div id="authLoggedIn" style="display:none;">
+    <div style="font-weight:700;margin-bottom:6px;color:#065f46;">✅ Admin Mode (editing enabled)</div>
+    <button class="btn btn-outline" style="width:100%;padding:7px;font-size:11px;" onclick="adminLogout()">Logout</button>
+  </div>
+</div>
+<style>
+  .admin-only{display:none;}
+  body.is-admin .admin-only{display:inline-block;}
+</style>
+
 <div class="navbar no-print">
   <div><h1>Taldangra Fulmati High School [H.S.] - Salary Portal</h1></div>
   <div class="nav-tabs">
@@ -256,14 +295,14 @@
     </select>
   </div>
   <div style="margin-left: auto; display: flex; gap: 8px; align-items: flex-end;">
-    <button class="btn btn-primary" onclick="saveMonthData()">💾 Save Month Data</button>
-    <button class="btn btn-success" onclick="document.getElementById('importJSONFile').click()">📁 Import This Month</button>
+    <button class="btn btn-primary admin-only" onclick="saveMonthData()">💾 Save Month Data</button>
+    <button class="btn btn-success admin-only" onclick="document.getElementById('importJSONFile').click()">📁 Import This Month</button>
     <input type="file" id="importJSONFile" style="display:none" accept=".json" onchange="importDataJSON(event)">
     <button class="btn btn-success" onclick="exportAllMonthsJSON()">⬇️ Export All 12 Months</button>
-    <button class="btn btn-success" onclick="document.getElementById('importAllJSONFile').click()">⬆️ Import All 12 Months</button>
+    <button class="btn btn-success admin-only" onclick="document.getElementById('importAllJSONFile').click()">⬆️ Import All 12 Months</button>
     <input type="file" id="importAllJSONFile" style="display:none" accept=".json" onchange="importAllMonthsJSON(event)">
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print View</button>
-    <button class="btn btn-outline" onclick="resetToDefault()">🔄 Reset Default</button>
+    <button class="btn btn-outline admin-only" onclick="resetToDefault()">🔄 Reset Default</button>
   </div>
 </div>
 
@@ -698,6 +737,84 @@ const DEFAULT_MARCH_STAFF = [
   { "sl": 30, "name": "PRAKASH SARDAR", "desig": "GR.D-LAB ATTENDANT", "group": "Gr-D", "gender": "M", "approval": "4848/S; 31-12-2012", "level": "LEVEL-1", "cell": "CELL-16", "basic": 26400.0, "da": 4752.0, "hra": 3168.0, "ma": 500.0, "addl": 0.0, "gross": 34820.0, "gpf": 2000.0, "ptax": 150.0, "itax": 0.0, "total_ded": 2150.0, "net": 32670.0, "dob": "1985-07-27", "dor": "2045-07-31", "doj_service": "2012-11-21", "doj_school": "2012-11-21", "emp_code": "PCHJ4347", "mob_no": "9002374924", "qualification": "M.P.", "pay_level_scale": "LEVEL-1-PB-1:4900-16200-GP-RS-1700", "staff_group": "N.A.", "subject": "N.A.", "caste": "S.T.", "medium": "Bengali", "pan": "ERDPS1092G" }
 ];
 
+// Cloud sync (Firebase) — bundles every per-month key into ONE Firestore document
+let cloudCache = { months: {}, configs: {} };
+let isAdmin = false;
+const SALARY_CLOUD_CACHE_KEY = 'TFHS_SALARY_CLOUD_CACHE';
+
+function setSyncStatus(text, color){
+  const el = document.getElementById('syncStatus');
+  if(el){ el.textContent = text; el.style.background = color || '#0f172a'; }
+}
+
+/* ---- Admin login/logout (Firebase Authentication) ---- */
+auth.onAuthStateChanged((user)=>{
+  isAdmin = !!user;
+  document.body.classList.toggle('is-admin', isAdmin);
+  document.getElementById('authLoggedOut').style.display = isAdmin ? 'none' : '';
+  document.getElementById('authLoggedIn').style.display = isAdmin ? '' : 'none';
+});
+function adminLogin(){
+  const email = document.getElementById('authEmail').value.trim();
+  const pass = document.getElementById('authPass').value;
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+  auth.signInWithEmailAndPassword(email, pass).catch((err)=>{
+    errEl.textContent = 'Login failed: incorrect email or password.';
+  });
+}
+function adminLogout(){ auth.signOut(); }
+
+/* ---- Real-time cloud sync of all months/configs ---- */
+salaryDocRef.onSnapshot((docSnap)=>{
+  if(docSnap.exists && docSnap.data()){
+    const data = docSnap.data();
+    cloudCache.months = data.months || {};
+    cloudCache.configs = data.configs || {};
+  } else {
+    cloudCache = { months: {}, configs: {} };
+  }
+  try{ localStorage.setItem(SALARY_CLOUD_CACHE_KEY, JSON.stringify(cloudCache)); }catch(e){}
+  setSyncStatus('☁ Synced', '#065f46');
+  refreshAfterCloudUpdate();
+}, (err)=>{
+  console.error('Firestore sync error, using local cache:', err);
+  setSyncStatus('⚠ Offline (local only)', '#b45309');
+  try{
+    const raw = localStorage.getItem(SALARY_CLOUD_CACHE_KEY);
+    cloudCache = raw ? JSON.parse(raw) : { months: {}, configs: {} };
+  }catch(e){ cloudCache = { months: {}, configs: {} }; }
+  refreshAfterCloudUpdate();
+});
+
+function pushCloudCache(){
+  setSyncStatus('☁ Saving…', '#1e3a8a');
+  salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, updatedAt: new Date().toISOString()})
+    .then(()=> setSyncStatus('☁ Synced', '#065f46'))
+    .catch((err)=>{
+      console.error('Firestore save failed:', err);
+      setSyncStatus('⚠ Save failed - check connection', '#b91c1c');
+    });
+}
+
+// Runs after every cloud snapshot (initial load AND any later change from any device):
+// seeds the two hardcoded default months on a brand-new database, then refreshes
+// whichever month is currently selected on screen.
+function refreshAfterCloudUpdate(){
+  if (!cloudCache.months['July-2026']) {
+    cloudCache.months['July-2026'] = JSON.parse(JSON.stringify(DEFAULT_STAFF));
+  }
+  if (!cloudCache.months['March-2026']) {
+    cloudCache.months['March-2026'] = JSON.parse(JSON.stringify(DEFAULT_MARCH_STAFF));
+  }
+  populateMonthDropdowns();
+  const main = document.getElementById('cfgMonthPicker');
+  main.value = main.value || '2026-07';
+  staffData = loadMonthData(parseMonthPickerValue(main.value));
+  applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
+  renderAll();
+}
+
 // Monthwise storage helpers
 function parseMonthPickerValue(val) {
   if (!val) return "July-2026";
@@ -754,22 +871,18 @@ function applyConfig(config) {
 function findPreviousMonthConfig(monthStr) {
   const target = monthKeyToIndex(monthStr);
   let bestKey = null, bestIdx = -Infinity;
-  for (let i=0; i<localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith('TFHS_SALARY_CONFIG_')) {
-      const m = k.substring('TFHS_SALARY_CONFIG_'.length);
-      const idx = monthKeyToIndex(m);
-      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
-    }
-  }
-  return bestKey ? JSON.parse(localStorage.getItem(getConfigStorageKey(bestKey))) : null;
+  Object.keys(cloudCache.configs).forEach(m => {
+    const idx = monthKeyToIndex(m);
+    if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
+  });
+  return bestKey ? cloudCache.configs[bestKey] : null;
 }
 
 // Loads the DA/HRA/MA/P.Tax config saved for this specific month; if this month was never
 // saved, carries forward the nearest earlier saved month's config; otherwise uses defaults.
 function loadMonthConfig(monthStr) {
-  const saved = localStorage.getItem(getConfigStorageKey(monthStr));
-  if (saved) return JSON.parse(saved);
+  const saved = cloudCache.configs[monthStr];
+  if (saved) return saved;
   const carried = findPreviousMonthConfig(monthStr);
   if (carried) return carried;
   return Object.assign({}, DEFAULT_CONFIG);
@@ -788,10 +901,7 @@ function monthKeyToIndex(m) {
 function getSavedMonths() {
   const set = new Set(FY_MONTHS_12);
   // Also surface any legacy/extra months already stored (e.g. March-2026 baseline)
-  for (let i=0; i<localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith('TFHS_SALARY_MONTH_')) set.add(k.substring('TFHS_SALARY_MONTH_'.length));
-  }
+  Object.keys(cloudCache.months).forEach(m => set.add(m));
   return Array.from(set).sort((a, b) => monthKeyToIndex(a) - monthKeyToIndex(b));
 }
 
@@ -800,15 +910,11 @@ function getSavedMonths() {
 function findPreviousMonthWithData(monthStr) {
   const target = monthKeyToIndex(monthStr);
   let bestKey = null, bestIdx = -Infinity;
-  for (let i=0; i<localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith('TFHS_SALARY_MONTH_')) {
-      const m = k.substring('TFHS_SALARY_MONTH_'.length);
-      const idx = monthKeyToIndex(m);
-      if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
-    }
-  }
-  return bestKey ? JSON.parse(localStorage.getItem(getStorageKey(bestKey))) : null;
+  Object.keys(cloudCache.months).forEach(m => {
+    const idx = monthKeyToIndex(m);
+    if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
+  });
+  return bestKey ? cloudCache.months[bestKey] : null;
 }
 function populateMonthDropdowns() {
   const months = getSavedMonths();
@@ -834,8 +940,8 @@ function populateMonthDropdowns() {
 
 let staffData = [];
 function loadMonthData(monthStr) {
-  const loaded = localStorage.getItem(getStorageKey(monthStr));
-  if (loaded) return JSON.parse(loaded);
+  const loaded = cloudCache.months[monthStr];
+  if (loaded) return JSON.parse(JSON.stringify(loaded));
   if (monthStr === 'March-2026') return JSON.parse(JSON.stringify(DEFAULT_MARCH_STAFF));
   if (monthStr === 'July-2026') return JSON.parse(JSON.stringify(DEFAULT_STAFF));
   // Not saved yet: carry forward the nearest earlier month's figures so entry starts warm.
@@ -853,9 +959,14 @@ function onMonthPickerChange() {
 }
 
 function saveMonthData() {
+  if (!isAdmin) { alert('Please log in as admin to save.'); return; }
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
+  cloudCache.months[monthStr] = JSON.parse(JSON.stringify(staffData));
+  cloudCache.configs[monthStr] = getCurrentConfig();
+  // Offline fallback — kept in sync alongside the cloud document.
   localStorage.setItem(getStorageKey(monthStr), JSON.stringify(staffData));
   localStorage.setItem(getConfigStorageKey(monthStr), JSON.stringify(getCurrentConfig()));
+  pushCloudCache();
   populateMonthDropdowns();
   alert(`Successfully saved staff data for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)}!`);
 }
@@ -1416,6 +1527,7 @@ function saveStaff(e) {
 }
 
 function importDataJSON(event) {
+  if (!isAdmin) { alert('Please log in as admin to import.'); event.target.value = ''; return; }
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -1438,9 +1550,13 @@ function importDataJSON(event) {
 }
 
 function resetToDefault() {
+  if (!isAdmin) { alert('Please log in as admin to reset.'); return; }
+  const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   if (confirm(`Reset staff records for ${formatMonthPickerToDisplay(document.getElementById('cfgMonthPicker').value)} to default?`)) {
     staffData = JSON.parse(JSON.stringify(DEFAULT_STAFF));
-    localStorage.removeItem(getStorageKey());
+    delete cloudCache.months[monthStr];
+    localStorage.removeItem(getStorageKey(monthStr));
+    pushCloudCache();
     renderAll();
   }
 }
@@ -1479,6 +1595,7 @@ function exportAllMonthsJSON() {
 // Restores all months from a single combined JSON file (created by exportAllMonthsJSON,
 // or any object shaped like { "Month-YYYY": [...staff], ... } / { months: { "Month-YYYY": [...] } }).
 function importAllMonthsJSON(event) {
+  if (!isAdmin) { alert('Please log in as admin to import.'); event.target.value = ''; return; }
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -1496,8 +1613,10 @@ function importAllMonthsJSON(event) {
         // New shape: { staff: [...], config: {...} }. Legacy shape: a plain staff array.
         const arr = Array.isArray(entry) ? entry : (entry && Array.isArray(entry.staff) ? entry.staff : null);
         if (arr) {
+          cloudCache.months[monthKey] = arr;
           localStorage.setItem(getStorageKey(monthKey), JSON.stringify(arr));
           if (entry && entry.config) {
+            cloudCache.configs[monthKey] = entry.config;
             localStorage.setItem(getConfigStorageKey(monthKey), JSON.stringify(entry.config));
           }
           count++;
@@ -1507,6 +1626,7 @@ function importAllMonthsJSON(event) {
         alert("No valid month entries found in the file.");
         return;
       }
+      pushCloudCache();
       populateMonthDropdowns();
       const main = document.getElementById('cfgMonthPicker');
       staffData = loadMonthData(parseMonthPickerValue(main.value));
@@ -1564,20 +1684,9 @@ function renderAll() {
   renderStaffTable();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  if (!localStorage.getItem(getStorageKey('July-2026'))) {
-    localStorage.setItem(getStorageKey('July-2026'), JSON.stringify(DEFAULT_STAFF));
-  }
-  if (!localStorage.getItem(getStorageKey('March-2026'))) {
-    localStorage.setItem(getStorageKey('March-2026'), JSON.stringify(DEFAULT_MARCH_STAFF));
-  }
-  populateMonthDropdowns();
-  const main = document.getElementById('cfgMonthPicker');
-  main.value = main.value || '2026-07';
-  staffData = loadMonthData(parseMonthPickerValue(main.value));
-  applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
-  renderAll();
-});
+// Initial population of months/staffData/config now happens inside
+// refreshAfterCloudUpdate(), which runs every time the Firestore document
+// syncs (including the very first load) — see the cloud-sync block above.
 </script>
 
 </body>
