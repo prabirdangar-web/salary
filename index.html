@@ -33,7 +33,11 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   }
   .navbar h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  .nav-tabs { display: flex; gap: 8px; }
+  .nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .navbar { padding-right: 250px !important; }
+  @media print { .navbar { padding-right: 0 !important; } }
+  .sheet-table:not(.has-bonus) .col-bonus { display: none; }
+  .sheet-table:not(.has-arrear) .col-arrear { display: none; }
   .nav-tab {
     background: rgba(255,255,255,0.12);
     border: none;
@@ -322,13 +326,13 @@
         </p>
       </div>
 
-      <table class="sheet-table">
+      <table class="sheet-table" id="aroll-table">
         <thead>
           <tr>
             <th rowspan="2" style="width: 25px;">Sl</th>
             <th rowspan="2" style="min-width: 155px;">Name & Designation<br><span class="sub-th">Approval No. & Level-Cell</span></th>
             <th rowspan="2">Basic<br><span class="sub-th">(Rs.)</span></th>
-            <th colspan="5">Allowances (Rs.)</th>
+            <th colspan="5" id="th-allow">Allowances (Rs.)</th>
             <th colspan="4">Deductions / Recoveries (Rs.)</th>
             <th rowspan="2">Net Pay<br><span class="sub-th">(Rs.)</span></th>
             <th rowspan="2" class="sig-cell">Revenue Stamp & Signature<br><span class="sub-th">& Acquittance Receipt</span></th>
@@ -338,6 +342,8 @@
             <th>H.R.A.</th>
             <th>M.A.</th>
             <th>Addl.</th>
+            <th class="col-bonus" style="background:#fef3c7;">Bonus</th>
+            <th class="col-arrear" style="background:#fef3c7;">Arrear</th>
             <th>Gross</th>
             <th>GPF</th>
             <th>P.TAX</th>
@@ -356,7 +362,7 @@
       <!-- Integrated Staff Category Summary Section with All Detailed Heads -->
       <div class="summary-section">
         <h3>📋 Staff Category Summary Breakdown</h3>
-        <table class="sheet-table" style="max-width: 100%;">
+        <table class="sheet-table" id="summary-table" style="max-width: 100%;">
           <thead>
             <tr>
               <th>Staff Category</th>
@@ -366,6 +372,8 @@
               <th>HRA (Rs.)</th>
               <th>MA (Rs.)</th>
               <th>Addl (Rs.)</th>
+              <th class="col-bonus">Bonus (Rs.)</th>
+              <th class="col-arrear">Arrear (Rs.)</th>
               <th>Gross (Rs.)</th>
               <th>GPF (Rs.)</th>
               <th>P.Tax (Rs.)</th>
@@ -525,6 +533,7 @@
             <th>GPF (Rs.)</th>
             <th>I.TAX (Rs.)</th>
             <th>P.TAX (Rs.)</th>
+            <th>Bonus / Arrear (this month)</th>
             <th>DOJ (School)</th>
             <th class="no-print">Actions</th>
           </tr>
@@ -618,6 +627,18 @@
         <div class="control-group">
           <label>Addl Remun. (Rs.)</label>
           <input type="number" id="inpAddl" min="0" step="50" value="0">
+        </div>
+        <div class="control-group" style="background:#fffbea;padding:6px;border-radius:4px;">
+          <label>Bonus (Rs.) - this month only</label>
+          <input type="number" id="inpBonus" min="0" step="1" value="0">
+        </div>
+        <div class="control-group" style="background:#fffbea;padding:6px;border-radius:4px;">
+          <label>Arrear (Rs.) - this month only</label>
+          <input type="number" id="inpArrear" min="0" step="1" value="0">
+        </div>
+        <div class="control-group full-width" style="background:#fffbea;padding:6px;border-radius:4px;">
+          <label>Arrear / Bonus Remark (optional)</label>
+          <input type="text" id="inpArrearNote" placeholder="e.g. DA arrear Apr-Jun 2026 / Puja Bonus">
         </div>
         <div class="control-group">
           <label>Date of 1st Joining (Service)</label>
@@ -1005,10 +1026,12 @@ function loadMonthData(monthStr) {
   if (monthStr === 'July-2026') return JSON.parse(JSON.stringify(DEFAULT_STAFF));
   // Not saved yet: carry forward the nearest earlier month's figures so entry starts warm.
   const carried = findPreviousMonthWithData(monthStr);
-  if (carried) return JSON.parse(JSON.stringify(carried));
+  if (carried) return stripOneTime(JSON.parse(JSON.stringify(carried)));
   return JSON.parse(JSON.stringify(DEFAULT_STAFF));
 }
 
+// Bonus / Arrear belong to one month only - strip them whenever a month is created by copying another.
+function stripOneTime(arr) { (arr || []).forEach(e => { e.bonus = 0; e.arrear = 0; e.arrearNote = ''; }); return arr; }
 function onMonthPickerChange() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
@@ -1111,7 +1134,10 @@ function getCalculatedStaff(emp, cfgOv, monthOv) {
   }
   
   const ma = maAmt;
-  const gross = basic + da + hra + ma + addl;
+  const bonus = parseFloat(emp.bonus) || 0;
+  const arrear = parseFloat(emp.arrear) || 0;
+  const regularGross = basic + da + hra + ma + addl;   // P.Tax slab is applied on regular pay only
+  const gross = regularGross + bonus + arrear;
   
   let ptax = 0;
   if (ptaxMode === 'auto') {
@@ -1120,7 +1146,7 @@ function getCalculatedStaff(emp, cfgOv, monthOv) {
       const pickerVal = document.getElementById('cfgMonthPicker') ? document.getElementById('cfgMonthPicker').value : null;
       monthStr = pickerVal ? parseMonthPickerValue(pickerVal) : null;
     }
-    ptax = calculateWBPtax(gross, monthStr);
+    ptax = calculateWBPtax(regularGross, monthStr);
   } else {
     ptax = parseFloat(emp.ptax) || 0;
   }
@@ -1132,7 +1158,7 @@ function getCalculatedStaff(emp, cfgOv, monthOv) {
   
   return {
     ...emp,
-    calculatedDA: da, calculatedHRA: hra, calculatedMA: ma,
+    calculatedDA: da, calculatedHRA: hra, calculatedMA: ma, calculatedBonus: bonus, calculatedArrear: arrear,
     calculatedGross: gross, calculatedPTax: ptax, calculatedTotalDed: totalDed, calculatedNet: net
   };
 }
@@ -1168,9 +1194,9 @@ function renderAroll() {
   const tbody = document.getElementById('aroll-tbody');
   tbody.innerHTML = '';
   
-  let subT = { basic:0, da:0, hra:0, ma:0, addl:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
-  let subLC = { basic:0, da:0, hra:0, ma:0, addl:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
-  let subGD = { basic:0, da:0, hra:0, ma:0, addl:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
+  let subT = { basic:0, da:0, hra:0, ma:0, addl:0, bonus:0, arrear:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
+  let subLC = { basic:0, da:0, hra:0, ma:0, addl:0, bonus:0, arrear:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
+  let subGD = { basic:0, da:0, hra:0, ma:0, addl:0, bonus:0, arrear:0, gross:0, gpf:0, ptax:0, itax:0, ded:0, net:0, count:0 };
 
   function addSubtotalRow(title, tObj) {
     const tr = document.createElement('tr');
@@ -1182,6 +1208,8 @@ function renderAroll() {
       <td class="num">${tObj.hra.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${tObj.ma.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${tObj.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus">${tObj.bonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear">${tObj.arrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${tObj.gross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${tObj.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${tObj.ptax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1201,7 +1229,7 @@ function renderAroll() {
     else if (idx >= 26) targetObj = subGD;
     
     targetObj.basic += emp.basic; targetObj.da += emp.calculatedDA; targetObj.hra += emp.calculatedHRA;
-    targetObj.ma += emp.calculatedMA; targetObj.addl += emp.addl; targetObj.gross += emp.calculatedGross;
+    targetObj.ma += emp.calculatedMA; targetObj.addl += emp.addl; targetObj.bonus += emp.calculatedBonus; targetObj.arrear += emp.calculatedArrear; targetObj.gross += emp.calculatedGross;
     targetObj.gpf += emp.gpf; targetObj.ptax += emp.calculatedPTax; targetObj.itax += emp.itax;
     targetObj.ded += emp.calculatedTotalDed; targetObj.net += emp.calculatedNet; targetObj.count += 1;
     
@@ -1221,6 +1249,8 @@ function renderAroll() {
       <td class="num">${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${emp.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus" style="background:#fffbea;">${emp.calculatedBonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear" style="background:#fffbea;">${emp.calculatedArrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}${emp.arrearNote ? '<div style="font-size:7.5px;color:#92400e;">'+emp.arrearNote+'</div>' : ''}</td>
       <td class="num bold" style="background-color: #f7fafc;">${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1251,6 +1281,8 @@ function renderAroll() {
     hra: subT.hra + subLC.hra + subGD.hra,
     ma: subT.ma + subLC.ma + subGD.ma,
     addl: subT.addl + subLC.addl + subGD.addl,
+    bonus: subT.bonus + subLC.bonus + subGD.bonus,
+    arrear: subT.arrear + subLC.arrear + subGD.arrear,
     gross: subT.gross + subLC.gross + subGD.gross,
     gpf: subT.gpf + subLC.gpf + subGD.gpf,
     ptax: subT.ptax + subLC.ptax + subGD.ptax,
@@ -1260,6 +1292,10 @@ function renderAroll() {
     count: subT.count + subLC.count + subGD.count
   };
 
+  // Show Bonus / Arrear columns only when at least one employee has an amount this month.
+  const hasB = grand.bonus > 0, hasA = grand.arrear > 0;
+  ['aroll-table','summary-table'].forEach(id => { const t = document.getElementById(id); if (t) { t.classList.toggle('has-bonus', hasB); t.classList.toggle('has-arrear', hasA); } });
+  document.getElementById('th-allow').colSpan = 5 + (hasB ? 1 : 0) + (hasA ? 1 : 0);
   const catTbody = document.getElementById('summary-category-tbody');
   catTbody.innerHTML = `
     <tr>
@@ -1270,6 +1306,8 @@ function renderAroll() {
       <td class="num">${subT.hra.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subT.ma.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subT.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus">${subT.bonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear">${subT.arrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subT.gross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subT.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subT.ptax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1285,6 +1323,8 @@ function renderAroll() {
       <td class="num">${subLC.hra.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subLC.ma.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subLC.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus">${subLC.bonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear">${subLC.arrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subLC.gross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subLC.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subLC.ptax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1300,6 +1340,8 @@ function renderAroll() {
       <td class="num">${subGD.hra.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subGD.ma.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subGD.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus">${subGD.bonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear">${subGD.arrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subGD.gross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subGD.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${subGD.ptax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1315,6 +1357,8 @@ function renderAroll() {
       <td class="num">${grand.hra.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${grand.ma.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${grand.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-bonus">${grand.bonus.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num col-arrear">${grand.arrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${grand.gross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${grand.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${grand.ptax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
@@ -1364,7 +1408,7 @@ function generatePayCertHTML(emp, month) {
           <tr><td>Dearness Allowance (DA)</td><td class="num">Rs. ${emp.calculatedDA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Professional Tax (P.Tax)</td><td class="num">Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr><td>House Rent Allowance (HRA)</td><td class="num">Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Income Tax (I.Tax TDS)</td><td class="num">Rs. ${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr><td>Medical Allowance (MA)</td><td class="num">Rs. ${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Other Deductions / CPF</td><td class="num">Rs. 0.00</td></tr>
-          <tr><td>Special / Addl Remuneration</td><td class="num">Rs. ${emp.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td style="font-weight: bold; background: #edf2f7;">Total Deductions</td><td class="num bold" style="background: #edf2f7;">Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
+          <tr><td>Special / Addl / Bonus / Arrear</td><td class="num">Rs. ${(emp.addl + emp.calculatedBonus + emp.calculatedArrear).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td style="font-weight: bold; background: #edf2f7;">Total Deductions</td><td class="num bold" style="background: #edf2f7;">Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr style="font-weight: bold; background: #e2e8f0;"><td>GROSS SALARY</td><td class="num">Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>NET SALARY PAYABLE</td><td class="num" style="color: #1a365d; font-size: 13.5px;">Rs. ${emp.calculatedNet.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
         </table>
         <p style="margin-top: 10px;"><strong>Gross Salary (in words):</strong> Rupees ${wordsGross}.<br><strong>Net Salary (in words):</strong> Rupees ${wordsNet}.</p>
@@ -1509,6 +1553,7 @@ function renderStaffTable() {
         <td class="num">${(parseFloat(emp.gpf)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
         <td class="num bold" style="color: #b7791f;">${(parseFloat(emp.itax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
         <td class="num">${(parseFloat(emp.ptax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+        <td class="num" style="font-size:11px;">${(parseFloat(emp.bonus)||0) || (parseFloat(emp.arrear)||0) ? 'B: ' + (parseFloat(emp.bonus)||0).toLocaleString('en-IN') + '<br>A: ' + (parseFloat(emp.arrear)||0).toLocaleString('en-IN') : '-'}</td>
         <td>${formatDateDDMMYYYY(emp.doj_school)}</td>
         <td class="center no-print">
           <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="editStaff(${idx})">✏️ Edit</button>
@@ -1541,6 +1586,9 @@ function openStaffModal(editIdx = -1) {
     document.getElementById('inpItax').value = emp.itax || 0;
     document.getElementById('inpPtax').value = emp.ptax || 200;
     document.getElementById('inpAddl').value = emp.addl || 0;
+    document.getElementById('inpBonus').value = emp.bonus || 0;
+    document.getElementById('inpArrear').value = emp.arrear || 0;
+    document.getElementById('inpArrearNote').value = emp.arrearNote || '';
     document.getElementById('inpDojService').value = emp.doj_service || '';
     document.getElementById('inpDojSchool').value = emp.doj_school || '';
     document.getElementById('inpDob').value = emp.dob || '';
@@ -1583,6 +1631,9 @@ function saveStaff(e) {
     itax: parseFloat(document.getElementById('inpItax').value) || 0,
     ptax: parseFloat(document.getElementById('inpPtax').value) || 200,
     addl: parseFloat(document.getElementById('inpAddl').value) || 0,
+    bonus: parseFloat(document.getElementById('inpBonus').value) || 0,
+    arrear: parseFloat(document.getElementById('inpArrear').value) || 0,
+    arrearNote: document.getElementById('inpArrearNote').value.trim(),
     doj_service: document.getElementById('inpDojService').value,
     doj_school: document.getElementById('inpDojSchool').value,
     dob: document.getElementById('inpDob').value,
@@ -1764,7 +1815,7 @@ function addMonth() {
     alert(display + ' already exists - opening it.');
   } else {
     if (!confirm('Add salary month ' + display + '?\n\nStaff list and DA/HRA/MA/P.Tax settings will be copied from the previous month. You can then edit and Save.')) return;
-    cloudCache.months[target] = JSON.parse(JSON.stringify(loadMonthData(target)));
+    cloudCache.months[target] = stripOneTime(JSON.parse(JSON.stringify(loadMonthData(target))));
     cloudCache.configs[target] = JSON.parse(JSON.stringify(loadMonthConfig(target)));
     pushCloudCache();
   }
@@ -1777,12 +1828,12 @@ function addMonth() {
 
 /* ================= FY-WISE REPORT ================= */
 const FY_COLS = [
-  {k:'basic', l:'Basic'}, {k:'da', l:'D.A.'}, {k:'hra', l:'H.R.A.'}, {k:'ma', l:'M.A.'}, {k:'addl', l:'Addl.'},
+  {k:'basic', l:'Basic'}, {k:'da', l:'D.A.'}, {k:'hra', l:'H.R.A.'}, {k:'ma', l:'M.A.'}, {k:'addl', l:'Addl.'}, {k:'bonus', l:'Bonus'}, {k:'arrear', l:'Arrear'},
   {k:'gross', l:'Gross'}, {k:'gpf', l:'GPF'}, {k:'ptax', l:'P.Tax'}, {k:'itax', l:'I.Tax'}, {k:'ded', l:'Total Ded.'}, {k:'net', l:'Net Pay'}
 ];
 function fyRow(raw, m) {
   const c = getCalculatedStaff(raw, loadMonthConfig(m), m);
-  return { basic: c.basic||0, da: c.calculatedDA, hra: c.calculatedHRA, ma: c.calculatedMA, addl: parseFloat(c.addl)||0,
+  return { basic: c.basic||0, da: c.calculatedDA, hra: c.calculatedHRA, ma: c.calculatedMA, addl: parseFloat(c.addl)||0, bonus: c.calculatedBonus, arrear: c.calculatedArrear,
            gross: c.calculatedGross, gpf: parseFloat(c.gpf)||0, ptax: c.calculatedPTax, itax: parseFloat(c.itax)||0,
            ded: c.calculatedTotalDed, net: c.calculatedNet };
 }
