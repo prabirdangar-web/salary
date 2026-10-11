@@ -259,6 +259,7 @@
     <button class="nav-tab" onclick="switchTab('lpc')">📑 Last Pay Certificate (LPC)</button>
     <button class="nav-tab" onclick="switchTab('staff')">👥 Staff Directory & Entry</button>
     <button class="nav-tab" onclick="switchTab('audit')">🔎 Monthwise Audit</button>
+    <button class="nav-tab" onclick="switchTab('fy')">📅 FY Report</button>
   </div>
 </div>
 
@@ -295,6 +296,8 @@
     </select>
   </div>
   <div style="margin-left: auto; display: flex; gap: 8px; align-items: flex-end;">
+    <input type="month" id="addMonthInput" class="admin-only" title="Month to add (default: next month after the latest)" style="padding:6px 8px;border:1px solid var(--border-color);border-radius:4px;font-size:12.5px;">
+    <button class="btn btn-success admin-only" onclick="addMonth()" title="Create the next salary month (copies staff & rates from the previous month) and continue monthly generation">➕ Add Month</button>
     <button class="btn btn-primary admin-only" onclick="saveMonthData()">💾 Save Month Data</button>
     <button class="btn btn-success admin-only" onclick="document.getElementById('importJSONFile').click()">📁 Import This Month</button>
     <input type="file" id="importJSONFile" style="display:none" accept=".json" onchange="importDataJSON(event)">
@@ -454,6 +457,43 @@
         </thead>
         <tbody id="audit-tbody"></tbody>
         <tfoot id="audit-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ================= TAB 6: FY-WISE REPORT ================= -->
+  <div id="tab-fy" class="tab-content">
+    <div class="controls-card no-print" style="margin:0 0 16px 0;">
+      <div class="control-group">
+        <label>Financial Year (Salary Months Mar - Feb)</label>
+        <select id="fy-select" onchange="renderFYReport()" style="min-width:150px;"></select>
+      </div>
+      <div class="control-group">
+        <label>Report View</label>
+        <select id="fy-view" onchange="renderFYReport()" style="min-width:230px;">
+          <option value="month">Month-wise Summary (all columns)</option>
+          <option value="emp">Employee-wise Annual (all columns)</option>
+          <option value="matrix">Employee x Month (one column)</option>
+        </select>
+      </div>
+      <div class="control-group" id="fy-col-wrap" style="display:none;">
+        <label>Column</label>
+        <select id="fy-col" onchange="renderFYReport()" style="min-width:120px;"></select>
+      </div>
+      <button class="btn btn-primary" onclick="renderFYReport()">🔄 Refresh</button>
+      <button class="btn btn-success" onclick="exportFYCSV()">⬇️ Download CSV</button>
+      <button class="btn btn-primary" onclick="printFYReport()">🖨️ Print (A4 Landscape)</button>
+    </div>
+    <div class="table-responsive" id="fy-report-area">
+      <div class="school-head">
+        <h2>FINANCIAL YEAR-WISE SALARY REPORT</h2>
+        <h3>TALDANGRA FULMATI HIGH SCHOOL [H.S.] | F.Y. <span id="fy-title"></span> (<span id="fy-range"></span>)</h3>
+        <p id="fy-note" style="margin:3px 0 0;font-size:10.5px;color:#718096;"></p>
+      </div>
+      <table class="sheet-table">
+        <thead id="fy-thead"></thead>
+        <tbody id="fy-tbody"></tbody>
+        <tfoot id="fy-tfoot"></tfoot>
       </table>
     </div>
   </div>
@@ -813,6 +853,7 @@ function refreshAfterCloudUpdate(){
   staffData = loadMonthData(parseMonthPickerValue(main.value));
   applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
   renderAll();
+  if (document.getElementById('tab-fy').classList.contains('active')) { populateFYDropdown(); renderFYReport(); }
 }
 
 // Monthwise storage helpers
@@ -875,7 +916,13 @@ function findPreviousMonthConfig(monthStr) {
     const idx = monthKeyToIndex(m);
     if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
   });
-  return bestKey ? cloudCache.configs[bestKey] : null;
+  if (bestKey) return cloudCache.configs[bestKey];
+  let laterKey = null, laterIdx = Infinity;
+  Object.keys(cloudCache.configs).forEach(m => {
+    const idx = monthKeyToIndex(m);
+    if (idx > target && idx < laterIdx) { laterIdx = idx; laterKey = m; }
+  });
+  return laterKey ? cloudCache.configs[laterKey] : null;
 }
 
 // Loads the DA/HRA/MA/P.Tax config saved for this specific month; if this month was never
@@ -887,10 +934,15 @@ function loadMonthConfig(monthStr) {
   if (carried) return carried;
   return Object.assign({}, DEFAULT_CONFIG);
 }
-// Fixed 12-month payroll cycle (FY 2026-27: April-2026 to March-2027).
-// Assumption: school salary FY runs April-March, matching the FY2026-27 income tax tool.
-const FY_MONTHS_12 = ["April-2026","May-2026","June-2026","July-2026","August-2026","September-2026",
-  "October-2026","November-2026","December-2026","January-2027","February-2027","March-2027"];
+// Starting months always listed. Every later month is created with the "Add Month" button.
+// Salary-month financial year runs MARCH to FEBRUARY (e.g. F.Y. 2025-26 = March-2025 .. February-2026).
+const FY_MONTHS_12 = ["March-2026","April-2026","May-2026","June-2026","July-2026"];
+const MONTH_NAMES_ALL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function monthIndexToKey(idx){ return MONTH_NAMES_ALL[idx % 12] + '-' + Math.floor(idx / 12); }
+// FY start year for a salary month: March..December -> same year, January/February -> previous year.
+function fyStartOfMonth(m){ const [mon, yr] = m.split('-'); const mi = MONTH_NAMES_ALL.indexOf(mon); return parseInt(yr,10) - (mi < 2 ? 1 : 0); }
+function fyLabel(startYear){ return startYear + '-' + String((startYear + 1) % 100).padStart(2,'0'); }
+function fyMonthsList(startYear){ const out=[]; for(let i=0;i<12;i++) out.push(monthIndexToKey((startYear*12) + 2 + i)); return out; }
 
 function monthKeyToIndex(m) {
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -914,7 +966,14 @@ function findPreviousMonthWithData(monthStr) {
     const idx = monthKeyToIndex(m);
     if (idx < target && idx > bestIdx) { bestIdx = idx; bestKey = m; }
   });
-  return bestKey ? cloudCache.months[bestKey] : null;
+  if (bestKey) return cloudCache.months[bestKey];
+  // Nothing earlier (e.g. adding an older month such as March-2025): use the nearest later month.
+  let laterKey = null, laterIdx = Infinity;
+  Object.keys(cloudCache.months).forEach(m => {
+    const idx = monthKeyToIndex(m);
+    if (idx > target && idx < laterIdx) { laterIdx = idx; laterKey = m; }
+  });
+  return laterKey ? cloudCache.months[laterKey] : null;
 }
 function populateMonthDropdowns() {
   const months = getSavedMonths();
@@ -1026,12 +1085,15 @@ function calculateWBPtax(gross, monthStr) {
   return m >= cutoff ? calculateWBPtaxNew(gross) : calculateWBPtaxOld(gross);
 }
 
-function getCalculatedStaff(emp) {
-  const daRate = parseFloat(document.getElementById('cfgDA').value) || 18;
-  const hraMode = document.getElementById('cfgHRAMode').value;
-  const hraMax = parseFloat(document.getElementById('cfgHRAMax').value) || 12000;
-  const maAmt = parseFloat(document.getElementById('cfgMA').value) || 500;
-  const ptaxMode = document.getElementById('cfgPTaxMode').value;
+// cfgOv / monthOv are optional: pass a month's saved config and "Month-YYYY" key to calculate any month
+// independently of what is currently on screen (used by the Audit and FY Report).
+function getCalculatedStaff(emp, cfgOv, monthOv) {
+  const cfg = cfgOv ? Object.assign({}, DEFAULT_CONFIG, cfgOv) : getCurrentConfig();
+  const daRate = parseFloat(cfg.da) || 18;
+  const hraMode = cfg.hraMode;
+  const hraMax = parseFloat(cfg.hraMax) || 12000;
+  const maAmt = parseFloat(cfg.ma) || 500;
+  const ptaxMode = cfg.ptaxMode;
   
   const basic = parseFloat(emp.basic) || 0;
   const addl = parseFloat(emp.addl) || 0;
@@ -1053,8 +1115,11 @@ function getCalculatedStaff(emp) {
   
   let ptax = 0;
   if (ptaxMode === 'auto') {
-    const pickerVal = document.getElementById('cfgMonthPicker') ? document.getElementById('cfgMonthPicker').value : null;
-    const monthStr = pickerVal ? parseMonthPickerValue(pickerVal) : null;
+    let monthStr = monthOv || null;
+    if (!monthStr) {
+      const pickerVal = document.getElementById('cfgMonthPicker') ? document.getElementById('cfgMonthPicker').value : null;
+      monthStr = pickerVal ? parseMonthPickerValue(pickerVal) : null;
+    }
     ptax = calculateWBPtax(gross, monthStr);
   } else {
     ptax = parseFloat(emp.ptax) || 0;
@@ -1082,6 +1147,7 @@ function switchTab(tabId) {
   if (tabId === 'lpc') renderLPCOptions();
   if (tabId === 'staff') renderStaffTable();
   if (tabId === 'audit') { populateMonthDropdowns(); renderAudit(); }
+  if (tabId === 'fy') { populateFYDropdown(); renderFYReport(); }
 }
 
 // Render Master Acquittance Roll with Category Sub-Totals & Detailed Summary Table at the End
@@ -1653,7 +1719,7 @@ function renderAudit(){
   da.forEach((raw,i)=>{
     const key=(raw.emp_code||raw.name||'').toString().toUpperCase();
     const eB=mapB.get(key)||{};
-    const A=getCalculatedStaff(raw), B=getCalculatedStaff(eB);
+    const A=getCalculatedStaff(raw, loadMonthConfig(ma), ma), B=getCalculatedStaff(eB, loadMonthConfig(mb), mb);
     rows.push({i:i+1,A,B,diff:(B.calculatedNet||0)-(A.calculatedNet||0)});
   });
   document.getElementById('audit-title-a').textContent=ma;
@@ -1677,6 +1743,185 @@ function renderAudit(){
     <td class="num">${fmtAudit(t.aBasic)}</td><td class="num">${fmtAudit(t.aGross)}</td><td class="num">${fmtAudit(t.aGpf)}</td><td class="num">${fmtAudit(t.aPtax)}</td><td class="num">${fmtAudit(t.aItax)}</td><td class="num">${fmtAudit(t.aDed)}</td><td class="num">${fmtAudit(t.aNet)}</td>
     <td class="num">${fmtAudit(t.bBasic)}</td><td class="num">${fmtAudit(t.bGross)}</td><td class="num">${fmtAudit(t.bGpf)}</td><td class="num">${fmtAudit(t.bPtax)}</td><td class="num">${fmtAudit(t.bItax)}</td><td class="num">${fmtAudit(t.bDed)}</td><td class="num">${fmtAudit(t.bNet)}</td><td class="num">${fmtAudit(t.diff)}</td>
   </tr>`;
+}
+
+/* ================= ADD MONTH ================= */
+// Creates a new salary month (default = the month after the latest existing one), copying staff + rates
+// from the nearest earlier month, stores it in the cloud document and opens it.
+function addMonth() {
+  if (!isAdmin) { alert('Please log in as admin to add a month.'); return; }
+  const inp = document.getElementById('addMonthInput');
+  let target;
+  if (inp && inp.value) {
+    target = parseMonthPickerValue(inp.value);
+  } else {
+    const all = getSavedMonths();
+    const lastIdx = monthKeyToIndex(all[all.length - 1]);
+    target = monthIndexToKey(lastIdx + 1);
+  }
+  const display = target.replace('-', ' ');
+  if (cloudCache.months[target]) {
+    alert(display + ' already exists - opening it.');
+  } else {
+    if (!confirm('Add salary month ' + display + '?\n\nStaff list and DA/HRA/MA/P.Tax settings will be copied from the previous month. You can then edit and Save.')) return;
+    cloudCache.months[target] = JSON.parse(JSON.stringify(loadMonthData(target)));
+    cloudCache.configs[target] = JSON.parse(JSON.stringify(loadMonthConfig(target)));
+    pushCloudCache();
+  }
+  populateMonthDropdowns();
+  const main = document.getElementById('cfgMonthPicker');
+  main.value = monthDisplayToISO(target);
+  if (inp) inp.value = '';
+  onMonthPickerChange();
+}
+
+/* ================= FY-WISE REPORT ================= */
+const FY_COLS = [
+  {k:'basic', l:'Basic'}, {k:'da', l:'D.A.'}, {k:'hra', l:'H.R.A.'}, {k:'ma', l:'M.A.'}, {k:'addl', l:'Addl.'},
+  {k:'gross', l:'Gross'}, {k:'gpf', l:'GPF'}, {k:'ptax', l:'P.Tax'}, {k:'itax', l:'I.Tax'}, {k:'ded', l:'Total Ded.'}, {k:'net', l:'Net Pay'}
+];
+function fyRow(raw, m) {
+  const c = getCalculatedStaff(raw, loadMonthConfig(m), m);
+  return { basic: c.basic||0, da: c.calculatedDA, hra: c.calculatedHRA, ma: c.calculatedMA, addl: parseFloat(c.addl)||0,
+           gross: c.calculatedGross, gpf: parseFloat(c.gpf)||0, ptax: c.calculatedPTax, itax: parseFloat(c.itax)||0,
+           ded: c.calculatedTotalDed, net: c.calculatedNet };
+}
+function fyZero() { const o = {}; FY_COLS.forEach(c => o[c.k] = 0); return o; }
+function fyAdd(t, r) { FY_COLS.forEach(c => t[c.k] += (Number(r[c.k]) || 0)); }
+
+function populateFYDropdown() {
+  const sel = document.getElementById('fy-select'); if (!sel) return;
+  const years = new Set();
+  Object.keys(cloudCache.months).forEach(m => years.add(fyStartOfMonth(m)));
+  getSavedMonths().forEach(m => years.add(fyStartOfMonth(m)));
+  const list = Array.from(years).sort((a,b) => b - a); // latest FY first
+  const old = sel.value;
+  sel.innerHTML = list.map(y => `<option value="${y}">F.Y. ${fyLabel(y)}</option>`).join('');
+  if (old && list.map(String).includes(old)) sel.value = old;
+  const colSel = document.getElementById('fy-col');
+  if (colSel && !colSel.options.length) {
+    colSel.innerHTML = FY_COLS.map(c => `<option value="${c.k}" ${c.k==='net'?'selected':''}>${c.l}</option>`).join('');
+  }
+}
+
+// Returns the report as { title, head:[..], rows:[[..]], foot:[..], note } so screen, print and CSV share one source.
+function buildFYReport() {
+  const sel = document.getElementById('fy-select');
+  const startYear = parseInt(sel.value, 10);
+  const view = document.getElementById('fy-view').value;
+  const months = fyMonthsList(startYear);
+  const have = months.filter(m => !!cloudCache.months[m]);
+  const out = { startYear, months, have, view };
+
+  if (view === 'month') {
+    out.head = ['Sl','Salary Month','Staff'].concat(FY_COLS.map(c => c.l));
+    out.rows = []; const tot = fyZero();
+    months.forEach((m, i) => {
+      if (!cloudCache.months[m]) { out.rows.push({cells:[i+1, m.replace('-',' '), 'No data saved'], missing:true}); return; }
+      const staff = cloudCache.months[m]; const t = fyZero();
+      staff.forEach(e => fyAdd(t, fyRow(e, m)));
+      fyAdd(tot, t);
+      out.rows.push({cells:[i+1, m.replace('-',' '), staff.length].concat(FY_COLS.map(c => t[c.k]))});
+    });
+    out.foot = ['', 'F.Y. TOTAL (' + have.length + ' month' + (have.length===1?'':'s') + ')', ''].concat(FY_COLS.map(c => tot[c.k]));
+  } else {
+    // Build per-employee, per-month figures.
+    const order = []; const map = new Map();
+    have.slice().reverse().forEach(m => { // latest month first so current staff order wins
+      cloudCache.months[m].forEach(e => {
+        const key = (e.emp_code || e.name || '').toString().toUpperCase();
+        if (!map.has(key)) { map.set(key, { name: e.name, desig: e.desig, months: {} }); order.push(key); }
+      });
+    });
+    have.forEach(m => {
+      cloudCache.months[m].forEach(e => {
+        const key = (e.emp_code || e.name || '').toString().toUpperCase();
+        map.get(key).months[m] = fyRow(e, m);
+      });
+    });
+    if (view === 'emp') {
+      out.head = ['Sl','Name & Designation','Months'].concat(FY_COLS.map(c => c.l));
+      out.rows = []; const tot = fyZero();
+      order.forEach((key, i) => {
+        const r = map.get(key); const t = fyZero(); let n = 0;
+        Object.keys(r.months).forEach(m => { fyAdd(t, r.months[m]); n++; });
+        fyAdd(tot, t);
+        out.rows.push({cells:[i+1, r.name + ' (' + (r.desig||'') + ')', n].concat(FY_COLS.map(c => t[c.k]))});
+      });
+      out.foot = ['', 'F.Y. TOTAL', ''].concat(FY_COLS.map(c => tot[c.k]));
+    } else {
+      const colKey = document.getElementById('fy-col').value || 'net';
+      const colLabel = (FY_COLS.find(c => c.k === colKey) || {}).l || colKey;
+      out.colLabel = colLabel;
+      out.head = ['Sl','Name & Designation'].concat(months.map(m => m.slice(0,3) + '-' + m.slice(-2))).concat(['F.Y. Total']);
+      out.rows = []; const colTot = months.map(() => 0); let grand = 0;
+      order.forEach((key, i) => {
+        const r = map.get(key); let sum = 0;
+        const cells = months.map((m, j) => {
+          if (!r.months[m]) return cloudCache.months[m] ? 0 : '-';
+          const v = r.months[m][colKey]; sum += v; colTot[j] += v; return v;
+        });
+        grand += sum;
+        out.rows.push({cells:[i+1, r.name + ' (' + (r.desig||'') + ')'].concat(cells).concat([sum])});
+      });
+      out.foot = ['', 'TOTAL - ' + colLabel].concat(colTot.map((v, j) => cloudCache.months[months[j]] ? v : '-')).concat([grand]);
+    }
+  }
+  return out;
+}
+
+function renderFYReport() {
+  const sel = document.getElementById('fy-select'); if (!sel) return;
+  if (!sel.options.length) populateFYDropdown();
+  if (!sel.options.length) return;
+  const view = document.getElementById('fy-view').value;
+  document.getElementById('fy-col-wrap').style.display = (view === 'matrix') ? '' : 'none';
+  const rep = buildFYReport();
+  document.getElementById('fy-title').textContent = fyLabel(rep.startYear);
+  document.getElementById('fy-range').textContent = rep.months[0].replace('-',' ') + ' to ' + rep.months[11].replace('-',' ');
+  const missing = rep.months.filter(m => !cloudCache.months[m]);
+  document.getElementById('fy-note').textContent = 'Months with saved data: ' + rep.have.length + ' of 12.' +
+    (missing.length ? ' Not saved (excluded from totals): ' + missing.map(m => m.slice(0,3) + '-' + m.slice(-2)).join(', ') + '.' : '') +
+    (view === 'matrix' ? ' Column shown: ' + rep.colLabel + '.' : '');
+  const fmt = v => (typeof v === 'number') ? v.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}) : v;
+  document.getElementById('fy-thead').innerHTML = '<tr>' + rep.head.map(h => `<th>${h}</th>`).join('') + '</tr>';
+  document.getElementById('fy-tbody').innerHTML = rep.rows.map(r => {
+    if (r.missing) return `<tr style="color:#a0aec0;"><td class="center">${r.cells[0]}</td><td>${r.cells[1]}</td><td colspan="${rep.head.length-2}" class="center"><i>${r.cells[2]}</i></td></tr>`;
+    return '<tr>' + r.cells.map((v, i) => {
+      const isNum = typeof v === 'number' && i >= (view === 'matrix' ? 2 : 3);
+      const left = (view === 'month' && i === 1) || (view !== 'month' && i === 1);
+      return `<td class="${isNum ? 'num' : (left ? 'wrap-text' : 'center')}">${isNum ? fmt(v) : v}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+  const start = (view === 'matrix') ? 2 : 3;
+  document.getElementById('fy-tfoot').innerHTML = '<tr class="subtotal-row">' + rep.foot.map((v, i) => {
+    if (i === 1) return `<td>${v}</td>`;
+    return `<td class="${typeof v === 'number' ? 'num' : 'center'}">${fmt(v)}</td>`;
+  }).join('') + '</tr>';
+}
+
+function printFYReport() {
+  const st = document.createElement('style');
+  st.id = 'fy-print-style';
+  st.textContent = '@page { size: A4 landscape; margin: 10mm; } @media print { #tab-fy .sheet-table { font-size: 9px; } }';
+  document.head.appendChild(st);
+  const cleanup = () => { const e = document.getElementById('fy-print-style'); if (e) e.remove(); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+}
+
+function exportFYCSV() {
+  const sel = document.getElementById('fy-select'); if (!sel || !sel.options.length) { alert('No data to export.'); return; }
+  const rep = buildFYReport();
+  const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const lines = [rep.head.map(esc).join(',')];
+  rep.rows.forEach(r => lines.push(r.cells.map(v => typeof v === 'number' ? v.toFixed(2) : esc(v)).join(',')));
+  lines.push(rep.foot.map(v => typeof v === 'number' ? v.toFixed(2) : esc(v)).join(','));
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `TFHS_FY_${fyLabel(rep.startYear)}_${rep.view}_Salary_Report.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 function renderAll() {
