@@ -118,21 +118,22 @@
 
   /* Revenue Stamp & Signature Box Layout */
   .sig-cell {
-    width: 175px;
-    min-width: 175px;
-    max-width: 185px;
+    width: 215px;
+    min-width: 215px;
+    max-width: 230px;
     padding: 3px !important;
     background-color: #fffdfa;
   }
   .sig-container-split {
     display: flex;
-    height: 84px;
+    height: 106px;
     border: 1px dashed #a0aec0;
     border-radius: 3px;
     background: #fafafa;
   }
   .sig-left-text {
-    width: 60%;
+    flex: 1 1 auto;
+    min-width: 0;
     padding: 4px;
     font-size: 7.5px;
     line-height: 1.25;
@@ -143,7 +144,8 @@
     font-weight: 500;
   }
   .sig-right-stamp {
-    width: 40%;
+    flex: 0 0 100px;
+    width: 100px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -163,6 +165,14 @@
     border-top: 1px solid #ccc;
     padding-top: 1px;
   }
+
+  /* Employee separation: double border + gap between two employees, double divider before signature column */
+  table.sheet-table tr.emp-row td { border-bottom: 3px double #2d3748; }
+  table.sheet-table tr.emp-row td.sig-cell { border-left: 3px double #2d3748; }
+  table.sheet-table tr.emp-gap td { border: none !important; padding: 0 !important; height: 6px; background: transparent; }
+  table.sheet-table tr.emp-gap { page-break-inside: avoid; }
+  .stamp-area { flex: 1; margin: 3px 0; border: 1px dashed #a0aec0; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #a0aec0; }
+  .arrear-ded-note { font-size: 7.5px; font-weight: normal; color: #92400e; line-height: 1.15; }
 
   /* Summary Table Styling */
   .summary-section { margin-top: 25px; border-top: 2px solid #cbd5e0; padding-top: 15px; }
@@ -201,6 +211,9 @@
   .modal-overlay.active { display: flex; }
   .modal-card { background: white; width: 90%; max-width: 800px; max-height: 90vh; overflow-y: auto; border-radius: 8px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 
+  /* Acquittance Roll prints on A4 landscape (named page) */
+  @page aroll { size: A4 landscape; margin: 8mm; }
+
   /* Print Styles - Acquittance (Landscape), LPC & PayCert (Portrait A4) */
   @media print {
     body { background: white; color: black; }
@@ -209,6 +222,18 @@
     .table-responsive { box-shadow: none !important; padding: 0 !important; }
     thead { display: table-header-group; }
     tr { page-break-inside: avoid; }
+    /* Acquittance Roll: A4 landscape, every column fitted to page width, any number of pages */
+    #tab-aroll { page: aroll; }
+    #tab-aroll .table-responsive { overflow: visible !important; }
+    #tab-aroll table.sheet-table { width: 100% !important; font-size: 8.5px; }
+    #tab-aroll table.sheet-table th, #tab-aroll table.sheet-table td { padding: 2px 2px; }
+    #tab-aroll table#aroll-table { table-layout: fixed; }
+    #tab-aroll table#aroll-table td.num { font-size: 8px; white-space: nowrap; }
+    #tab-aroll .sig-cell { width: auto !important; min-width: 0 !important; max-width: none !important; }
+    #tab-aroll .sig-container-split { height: 100px; }
+    #tab-aroll .summary-section { page-break-inside: avoid; break-inside: avoid; }
+    #tab-aroll .summary-section table { page-break-inside: avoid; }
+    #tab-aroll tfoot { display: table-footer-group; }
     .certificate-card { box-shadow: none !important; border: none !important; padding: 0 !important; max-width: 100% !important; page-break-after: always; @page { size: landscape; } }
     .lpc-document { box-shadow: none !important; border: none !important; padding: 0 !important; max-width: 100% !important; page-break-after: always; @page { size: portrait; margin: 15mm; } }
   }
@@ -327,6 +352,11 @@
       </div>
 
       <table class="sheet-table" id="aroll-table">
+        <colgroup>
+          <col style="width:2.2%"><col style="width:12%"><col style="width:5.8%"><col style="width:5.2%"><col style="width:5.2%"><col style="width:3.8%"><col style="width:3.8%">
+          <col class="col-bonus" style="width:4.8%"><col class="col-arrear" style="width:4.8%">
+          <col style="width:6.2%"><col style="width:4.8%"><col style="width:5%"><col style="width:5%"><col style="width:6%"><col style="width:6.2%"><col style="width:19%">
+        </colgroup>
         <thead>
           <tr>
             <th rowspan="2" style="width: 25px;">Sl</th>
@@ -635,6 +665,14 @@
         <div class="control-group" style="background:#fffbea;padding:6px;border-radius:4px;">
           <label>Arrear (Rs.) - this month only</label>
           <input type="number" id="inpArrear" min="0" step="1" value="0">
+        </div>
+        <div class="control-group" style="background:#fffbea;padding:6px;border-radius:4px;">
+          <label>Addl. P.TAX on Arrear (Rs.) - this month only</label>
+          <input type="number" id="inpAddlPtax" min="0" step="1" value="0">
+        </div>
+        <div class="control-group" style="background:#fffbea;padding:6px;border-radius:4px;">
+          <label>Addl. I.TAX on Arrear (Rs.) - this month only</label>
+          <input type="number" id="inpAddlItax" min="0" step="1" value="0">
         </div>
         <div class="control-group full-width" style="background:#fffbea;padding:6px;border-radius:4px;">
           <label>Arrear / Bonus Remark (optional)</label>
@@ -1031,7 +1069,7 @@ function loadMonthData(monthStr) {
 }
 
 // Bonus / Arrear belong to one month only - strip them whenever a month is created by copying another.
-function stripOneTime(arr) { (arr || []).forEach(e => { e.bonus = 0; e.arrear = 0; e.arrearNote = ''; }); return arr; }
+function stripOneTime(arr) { (arr || []).forEach(e => { e.bonus = 0; e.arrear = 0; e.addlPtax = 0; e.addlItax = 0; e.arrearNote = ''; }); return arr; }
 function onMonthPickerChange() {
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
@@ -1150,16 +1188,20 @@ function getCalculatedStaff(emp, cfgOv, monthOv) {
   } else {
     ptax = parseFloat(emp.ptax) || 0;
   }
-  
+  // Additional P.Tax / I.Tax recovered in an arrear month (this month only)
+  const addlPtax = parseFloat(emp.addlPtax) || 0;
+  const addlItax = parseFloat(emp.addlItax) || 0;
+  ptax += addlPtax;
+
   const gpf = parseFloat(emp.gpf) || 0;
-  const itax = parseFloat(emp.itax) || 0;
+  const itax = (parseFloat(emp.itax) || 0) + addlItax;
   const totalDed = gpf + ptax + itax;
   const net = gross - totalDed;
   
   return {
     ...emp,
     calculatedDA: da, calculatedHRA: hra, calculatedMA: ma, calculatedBonus: bonus, calculatedArrear: arrear,
-    calculatedGross: gross, calculatedPTax: ptax, calculatedTotalDed: totalDed, calculatedNet: net
+    calculatedGross: gross, calculatedPTax: ptax, calculatedITax: itax, calculatedAddlPTax: addlPtax, calculatedAddlITax: addlItax, calculatedTotalDed: totalDed, calculatedNet: net
   };
 }
 
@@ -1230,13 +1272,13 @@ function renderAroll() {
     
     targetObj.basic += emp.basic; targetObj.da += emp.calculatedDA; targetObj.hra += emp.calculatedHRA;
     targetObj.ma += emp.calculatedMA; targetObj.addl += emp.addl; targetObj.bonus += emp.calculatedBonus; targetObj.arrear += emp.calculatedArrear; targetObj.gross += emp.calculatedGross;
-    targetObj.gpf += emp.gpf; targetObj.ptax += emp.calculatedPTax; targetObj.itax += emp.itax;
+    targetObj.gpf += emp.gpf; targetObj.ptax += emp.calculatedPTax; targetObj.itax += emp.calculatedITax;
     targetObj.ded += emp.calculatedTotalDed; targetObj.net += emp.calculatedNet; targetObj.count += 1;
     
     const wordsGross = numberToWordsINR(emp.calculatedGross);
     
     const tr = document.createElement('tr');
-    tr.className = idx % 2 === 0 ? '' : 'highlight-row';
+    tr.className = 'emp-row' + (idx % 2 === 0 ? '' : ' highlight-row');
     tr.innerHTML = `
       <td class="center bold">${idx + 1}</td>
       <td class="wrap-text">
@@ -1253,15 +1295,16 @@ function renderAroll() {
       <td class="num col-arrear" style="background:#fffbea;">${emp.calculatedArrear.toLocaleString('en-IN', {minimumFractionDigits: 2})}${emp.arrearNote ? '<div style="font-size:7.5px;color:#92400e;">'+emp.arrearNote+'</div>' : ''}</td>
       <td class="num bold" style="background-color: #f7fafc;">${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num">${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-      <td class="num">${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-      <td class="num bold" style="background-color: #fff9db; color: #975a16;">${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+      <td class="num">${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})}${emp.calculatedAddlPTax ? '<div class="arrear-ded-note">incl. addl '+emp.calculatedAddlPTax.toLocaleString('en-IN')+'</div>' : ''}</td>
+      <td class="num bold" style="background-color: #fff9db; color: #975a16;">${emp.calculatedITax.toLocaleString('en-IN', {minimumFractionDigits: 2})}${emp.calculatedAddlITax ? '<div class="arrear-ded-note">incl. addl '+emp.calculatedAddlITax.toLocaleString('en-IN')+'</div>' : ''}</td>
       <td class="num bold">${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="num bold" style="color: #2b6cb0; font-size: 10.5px; background-color: #ebf8ff;">${emp.calculatedNet.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
       <td class="sig-cell">
         <div class="sig-container-split">
           <div class="sig-left-text">Received on Gross Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})} (${wordsGross})</div>
           <div class="sig-right-stamp">
-            <div class="stamp-box-label">₹1 Rev. Stamp</div>
+            <div class="stamp-box-label">Affix ₹1 Rev. Stamp</div>
+            <div class="stamp-area">stamp here</div>
             <div class="sig-date-line">Sign / Date</div>
           </div>
         </div>
@@ -1271,6 +1314,12 @@ function renderAroll() {
 
     if (idx === 23) addSubtotalRow("TEACHING STAFF", subT);
     else if (idx === 25) addSubtotalRow("LIBRARIAN & CLERK", subLC);
+    else if (idx < staffData.length - 1) {
+      const gap = document.createElement('tr');
+      gap.className = 'emp-gap';
+      gap.innerHTML = '<td colspan="16"></td>';
+      tbody.appendChild(gap);
+    }
   });
   
   addSubtotalRow("GROUP-D STAFF", subGD);
@@ -1406,7 +1455,7 @@ function generatePayCertHTML(emp, month) {
           <tr><th colspan="2">1. EARNINGS / EMOLUMENTS</th><th colspan="2">2. DEDUCTIONS / RECOVERIES</th></tr>
           <tr><td>Basic Pay</td><td class="num">Rs. ${emp.basic.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>General Provident Fund (GPF)</td><td class="num">Rs. ${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr><td>Dearness Allowance (DA)</td><td class="num">Rs. ${emp.calculatedDA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Professional Tax (P.Tax)</td><td class="num">Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
-          <tr><td>House Rent Allowance (HRA)</td><td class="num">Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Income Tax (I.Tax TDS)</td><td class="num">Rs. ${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
+          <tr><td>House Rent Allowance (HRA)</td><td class="num">Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Income Tax (I.Tax TDS)</td><td class="num">Rs. ${emp.calculatedITax.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr><td>Medical Allowance (MA)</td><td class="num">Rs. ${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>Other Deductions / CPF</td><td class="num">Rs. 0.00</td></tr>
           <tr><td>Special / Addl / Bonus / Arrear</td><td class="num">Rs. ${(emp.addl + emp.calculatedBonus + emp.calculatedArrear).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td style="font-weight: bold; background: #edf2f7;">Total Deductions</td><td class="num bold" style="background: #edf2f7;">Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
           <tr style="font-weight: bold; background: #e2e8f0;"><td>GROSS SALARY</td><td class="num">Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td><td>NET SALARY PAYABLE</td><td class="num" style="color: #1a365d; font-size: 13.5px;">Rs. ${emp.calculatedNet.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td></tr>
@@ -1491,7 +1540,7 @@ function renderLPC() {
       <div class="lpc-row" style="border: 1px solid #000; padding: 7px; margin: 8px 0; background: #fafafa;">
         ${heShe} has drawn substantive pay as BASIC PAY : Rs. ${emp.basic.toLocaleString('en-IN', {minimumFractionDigits: 2})}; DA : Rs. ${emp.calculatedDA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HRA : Rs. ${emp.calculatedHRA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; MA : Rs. ${emp.calculatedMA.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; HM / AHM / Other Allowances : Rs. ${emp.addl.toLocaleString('en-IN', {minimumFractionDigits: 2})} at the rate (Gross Salary) : Rs. ${emp.calculatedGross.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsGross} ] a month ${displayMonth}.<br>
         and additional pay as -------------NIL---------- at the rate of Rs. -------X------- a month---X---.<br>
-        Less the GPF : Rs. ${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; P.TAX : Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; I.TAX : Rs. ${emp.itax.toLocaleString('en-IN', {minimumFractionDigits: 2})}. Total deduction = Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsDed} ]. Deductions shown below, up to the month of ${displayMonth}.
+        Less the GPF : Rs. ${emp.gpf.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; P.TAX : Rs. ${emp.calculatedPTax.toLocaleString('en-IN', {minimumFractionDigits: 2})} ; I.TAX : Rs. ${emp.calculatedITax.toLocaleString('en-IN', {minimumFractionDigits: 2})}. Total deduction = Rs. ${emp.calculatedTotalDed.toLocaleString('en-IN', {minimumFractionDigits: 2})} [ Rupees ${wordsDed} ]. Deductions shown below, up to the month of ${displayMonth}.
       </div>
       <div class="lpc-row"><strong>${heShe} made over charge of ${hisHer.toLowerCase()} duties on the afternoon of ${releaseDateFormatted}</strong></div>
       
@@ -1551,8 +1600,8 @@ function renderStaffTable() {
         <td class="num bold">${(parseFloat(emp.basic)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
         <td class="num bold" style="color: #2b6cb0;">${(parseFloat(emp.hra)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
         <td class="num">${(parseFloat(emp.gpf)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-        <td class="num bold" style="color: #b7791f;">${(parseFloat(emp.itax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-        <td class="num">${(parseFloat(emp.ptax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+        <td class="num bold" style="color: #b7791f;">${(parseFloat(emp.itax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}${(parseFloat(emp.addlItax)||0) ? '<br><small style="color:#92400e;">+ addl '+(parseFloat(emp.addlItax)||0).toLocaleString('en-IN')+'</small>' : ''}</td>
+        <td class="num">${(parseFloat(emp.ptax)||0).toLocaleString('en-IN', {minimumFractionDigits: 2})}${(parseFloat(emp.addlPtax)||0) ? '<br><small style="color:#92400e;">+ addl '+(parseFloat(emp.addlPtax)||0).toLocaleString('en-IN')+'</small>' : ''}</td>
         <td class="num" style="font-size:11px;">${(parseFloat(emp.bonus)||0) || (parseFloat(emp.arrear)||0) ? 'B: ' + (parseFloat(emp.bonus)||0).toLocaleString('en-IN') + '<br>A: ' + (parseFloat(emp.arrear)||0).toLocaleString('en-IN') : '-'}</td>
         <td>${formatDateDDMMYYYY(emp.doj_school)}</td>
         <td class="center no-print">
@@ -1588,6 +1637,8 @@ function openStaffModal(editIdx = -1) {
     document.getElementById('inpAddl').value = emp.addl || 0;
     document.getElementById('inpBonus').value = emp.bonus || 0;
     document.getElementById('inpArrear').value = emp.arrear || 0;
+    document.getElementById('inpAddlPtax').value = emp.addlPtax || 0;
+    document.getElementById('inpAddlItax').value = emp.addlItax || 0;
     document.getElementById('inpArrearNote').value = emp.arrearNote || '';
     document.getElementById('inpDojService').value = emp.doj_service || '';
     document.getElementById('inpDojSchool').value = emp.doj_school || '';
@@ -1633,6 +1684,8 @@ function saveStaff(e) {
     addl: parseFloat(document.getElementById('inpAddl').value) || 0,
     bonus: parseFloat(document.getElementById('inpBonus').value) || 0,
     arrear: parseFloat(document.getElementById('inpArrear').value) || 0,
+    addlPtax: parseFloat(document.getElementById('inpAddlPtax').value) || 0,
+    addlItax: parseFloat(document.getElementById('inpAddlItax').value) || 0,
     arrearNote: document.getElementById('inpArrearNote').value.trim(),
     doj_service: document.getElementById('inpDojService').value,
     doj_school: document.getElementById('inpDojSchool').value,
@@ -1779,7 +1832,7 @@ function renderAudit(){
   let t={aBasic:0,aGross:0,aGpf:0,aPtax:0,aItax:0,aDed:0,aNet:0,bBasic:0,bGross:0,bGpf:0,bPtax:0,bItax:0,bDed:0,bNet:0,diff:0};
   rows.forEach(r=>{
     const A=r.A||{},B=r.B||{};
-    const vals=[A.basic,A.calculatedGross,A.gpf,A.calculatedPTax,A.itax,A.calculatedTotalDed,A.calculatedNet,B.basic,B.calculatedGross,B.gpf,B.calculatedPTax,B.itax,B.calculatedTotalDed,B.calculatedNet];
+    const vals=[A.basic,A.calculatedGross,A.gpf,A.calculatedPTax,A.calculatedITax,A.calculatedTotalDed,A.calculatedNet,B.basic,B.calculatedGross,B.gpf,B.calculatedPTax,B.calculatedITax,B.calculatedTotalDed,B.calculatedNet];
     const nums=vals.map(x=>Number(x)||0);
     t.aBasic+=nums[0];t.aGross+=nums[1];t.aGpf+=nums[2];t.aPtax+=nums[3];t.aItax+=nums[4];t.aDed+=nums[5];t.aNet+=nums[6];
     t.bBasic+=nums[7];t.bGross+=nums[8];t.bGpf+=nums[9];t.bPtax+=nums[10];t.bItax+=nums[11];t.bDed+=nums[12];t.bNet+=nums[13];t.diff+=r.diff;
@@ -1834,7 +1887,7 @@ const FY_COLS = [
 function fyRow(raw, m) {
   const c = getCalculatedStaff(raw, loadMonthConfig(m), m);
   return { basic: c.basic||0, da: c.calculatedDA, hra: c.calculatedHRA, ma: c.calculatedMA, addl: parseFloat(c.addl)||0, bonus: c.calculatedBonus, arrear: c.calculatedArrear,
-           gross: c.calculatedGross, gpf: parseFloat(c.gpf)||0, ptax: c.calculatedPTax, itax: parseFloat(c.itax)||0,
+           gross: c.calculatedGross, gpf: parseFloat(c.gpf)||0, ptax: c.calculatedPTax, itax: c.calculatedITax,
            ded: c.calculatedTotalDed, net: c.calculatedNet };
 }
 function fyZero() { const o = {}; FY_COLS.forEach(c => o[c.k] = 0); return o; }
