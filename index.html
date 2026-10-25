@@ -237,6 +237,32 @@
     .certificate-card { box-shadow: none !important; border: none !important; padding: 0 !important; max-width: 100% !important; page-break-after: always; @page { size: landscape; } }
     .lpc-document { box-shadow: none !important; border: none !important; padding: 0 !important; max-width: 100% !important; page-break-after: always; @page { size: portrait; margin: 15mm; } }
   }
+
+  /* ===== My Pay Slip (staff self-service) ===== */
+  .ps-gate { max-width: 460px; margin: 30px auto; background: #fff; border-radius: 10px; padding: 26px; box-shadow: 0 2px 12px rgba(0,0,0,.12); border-top: 4px solid var(--accent); }
+  .ps-gate h2 { margin: 0 0 6px; color: var(--primary); font-size: 19px; }
+  .ps-gate p { margin: 0 0 16px; font-size: 12.5px; color: #718096; }
+  .ps-field { margin-bottom: 12px; }
+  .ps-field label { display:block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #718096; margin-bottom: 4px; }
+  .ps-field select, .ps-field input { width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; margin-bottom: 5px; }
+  #ps-error { color: #b91c1c; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .payslip { background: #fff; max-width: 780px; margin: 0 auto 20px; padding: 28px 32px; border: 1.5px solid #2d3748; border-radius: 6px; font-family: 'Times New Roman', Times, serif; font-size: 13px; }
+  .payslip .ps-head { text-align: center; border-bottom: 2px double #2d3748; padding-bottom: 8px; margin-bottom: 12px; }
+  .payslip .ps-head h2 { margin: 0 0 3px; font-size: 18px; text-transform: uppercase; }
+  .payslip .ps-head p { margin: 1px 0; font-size: 11.5px; }
+  .payslip .ps-title { text-align: center; font-weight: bold; font-size: 14px; text-decoration: underline; margin: 10px 0; }
+  .payslip table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .payslip td, .payslip th { border: 1px solid #4a5568; padding: 5px 8px; }
+  .payslip th { background: #edf2f7; text-align: left; }
+  .payslip td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+  .payslip .ps-id td { border: none; padding: 2px 6px; font-size: 12.5px; }
+  .payslip .ps-total td { font-weight: bold; background: #e2e8f0; }
+  .payslip .ps-net td { font-weight: bold; font-size: 15px; background: #ebf8ff; color: #1a365d; }
+  .payslip .ps-foot { font-size: 10.5px; color: #4a5568; margin-top: 12px; text-align: center; }
+  @media print {
+    #tab-payslip .payslip { box-shadow: none !important; border: 1px solid #000 !important; margin: 0 auto !important; }
+    #ps-gate { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -289,10 +315,11 @@
     <button class="nav-tab" onclick="switchTab('staff')">👥 Staff Directory & Entry</button>
     <button class="nav-tab" onclick="switchTab('audit')">🔎 Monthwise Audit</button>
     <button class="nav-tab" onclick="switchTab('fy')">📅 FY Report</button>
+    <button class="nav-tab" onclick="switchTab('payslip')">🧾 My Pay Slip</button>
   </div>
 </div>
 
-<div class="controls-card no-print">
+<div class="controls-card no-print" id="top-controls">
   <div class="control-group">
     <label>Salary Month (MMM YYYY)</label>
     <select id="cfgMonthPicker" onchange="onMonthPickerChange()" style="min-width:160px;"></select>
@@ -533,6 +560,51 @@
         <tbody id="fy-tbody"></tbody>
         <tfoot id="fy-tfoot"></tfoot>
       </table>
+    </div>
+  </div>
+
+  <!-- ================= TAB 7: MY PAY SLIP (staff self-service) ================= -->
+  <div id="tab-payslip" class="tab-content">
+    <div id="ps-gate" class="ps-gate no-print">
+      <h2>🧾 My Pay Slip</h2>
+      <p>Enter any two of your identity details to view your own salary slip.</p>
+      <div class="ps-field">
+        <label>Identity Detail 1</label>
+        <select id="ps-f1" onchange="psFactorChanged()">
+          <option value="code" selected>Employee Code</option>
+          <option value="pan">PAN Number</option>
+          <option value="dob">Date of Birth</option>
+          <option value="mob">Mobile Number</option>
+        </select>
+        <input id="ps-v1" autocomplete="off" onkeydown="if(event.key==='Enter')psVerify();">
+      </div>
+      <div class="ps-field">
+        <label>Identity Detail 2</label>
+        <select id="ps-f2" onchange="psFactorChanged()">
+          <option value="code">Employee Code</option>
+          <option value="pan" selected>PAN Number</option>
+          <option value="dob">Date of Birth</option>
+          <option value="mob">Mobile Number</option>
+        </select>
+        <input id="ps-v2" autocomplete="off" onkeydown="if(event.key==='Enter')psVerify();">
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" onclick="psVerify()">View My Pay Slip</button>
+      <div id="ps-error"></div>
+    </div>
+
+    <div id="ps-view" style="display:none;">
+      <div class="controls-card no-print" style="margin:0 0 16px 0;">
+        <div class="control-group">
+          <label>Salary Month</label>
+          <select id="ps-month" onchange="psRender()" style="min-width:170px;"></select>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="window.print()">🖨️ Print Pay Slip</button>
+          <button class="btn btn-outline" onclick="psLogout()">🚪 Close / Exit</button>
+        </div>
+      </div>
+      <div id="ps-slip"></div>
+      <div id="ps-fy" class="table-responsive no-print"></div>
     </div>
   </div>
 
@@ -1210,6 +1282,8 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('tab-' + tabId).classList.add('active');
+  document.getElementById('top-controls').style.display = (tabId === 'payslip') ? 'none' : '';
+  if (tabId === 'payslip') initPaySlipTab();
   
   if (tabId === 'paycert') renderPayCertOptions();
   if (tabId === 'lpc') renderLPCOptions();
@@ -2028,7 +2102,189 @@ function exportFYCSV() {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+/* ================= MY PAY SLIP (staff self-service) ================= */
+const PS_FACTORS = {
+  code: { type: 'text', ph: 'e.g. JVMK0539' },
+  pan:  { type: 'text', ph: 'e.g. AHGPD9070Q' },
+  dob:  { type: 'date', ph: '' },
+  mob:  { type: 'tel',  ph: '10-digit mobile number' }
+};
+const PS_LOCK_KEY = 'TFHS_PS_LOCK';
+let psVerifiedCode = null;
+
+function psEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function psFmt(n) { return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function psNorm(factor, val) {
+  val = (val == null ? '' : String(val)).trim();
+  if (factor === 'dob') return val;
+  if (factor === 'mob') return val.replace(/\D/g, '').slice(-10);
+  return val.replace(/\s+/g, '').toUpperCase();
+}
+function psFactorValue(emp, factor) {
+  const map = { code: emp.emp_code, pan: emp.pan, dob: emp.dob, mob: emp.mob_no };
+  return psNorm(factor, map[factor]);
+}
+function psGetLock() { try { return JSON.parse(localStorage.getItem(PS_LOCK_KEY)) || { n: 0, until: 0 }; } catch (e) { return { n: 0, until: 0 }; } }
+function psSetLock(o) { try { localStorage.setItem(PS_LOCK_KEY, JSON.stringify(o)); } catch (e) {} }
+
+// Latest saved record per employee code (later months overwrite earlier ones).
+function psLatestStaffMap() {
+  const map = new Map();
+  Object.keys(cloudCache.months).sort((a, b) => monthKeyToIndex(a) - monthKeyToIndex(b)).forEach(m => {
+    (cloudCache.months[m] || []).forEach(e => { if (e.emp_code) map.set(String(e.emp_code).trim().toUpperCase(), e); });
+  });
+  return map;
+}
+
+function psFactorChanged() {
+  [['ps-f1', 'ps-v1'], ['ps-f2', 'ps-v2']].forEach(([s, i]) => {
+    const f = document.getElementById(s).value, inp = document.getElementById(i);
+    if (inp.dataset.factor !== f) {
+      inp.dataset.factor = f; inp.type = PS_FACTORS[f].type; inp.placeholder = PS_FACTORS[f].ph; inp.value = '';
+    }
+  });
+}
+
+function initPaySlipTab() {
+  psFactorChanged();
+  if (psVerifiedCode) psShowSlip(); else psShowGate();
+}
+function psShowGate() {
+  document.getElementById('ps-gate').style.display = '';
+  document.getElementById('ps-view').style.display = 'none';
+}
+
+function psVerify() {
+  const err = document.getElementById('ps-error'); err.textContent = '';
+  let lock = psGetLock();
+  if (lock.until > Date.now()) {
+    err.textContent = 'Too many wrong attempts. Please try again after ' + Math.ceil((lock.until - Date.now()) / 60000) + ' minute(s).';
+    return;
+  }
+  const f1 = document.getElementById('ps-f1').value, f2 = document.getElementById('ps-f2').value;
+  if (f1 === f2) { err.textContent = 'Please choose two different identity details.'; return; }
+  const v1 = psNorm(f1, document.getElementById('ps-v1').value), v2 = psNorm(f2, document.getElementById('ps-v2').value);
+  if (!v1 || !v2) { err.textContent = 'Please fill in both details.'; return; }
+  const staffMap = psLatestStaffMap();
+  if (staffMap.size === 0) { err.textContent = 'Salary data is still loading. Please wait a moment and try again.'; return; }
+  let found = null;
+  staffMap.forEach(e => {
+    if (found) return;
+    const a = psFactorValue(e, f1), b = psFactorValue(e, f2);
+    if (a && b && a === v1 && b === v2) found = e;
+  });
+  if (!found) {
+    lock.n = (lock.n || 0) + 1;
+    if (lock.n >= 5) lock = { n: 0, until: Date.now() + 5 * 60000 };
+    psSetLock(lock);
+    err.textContent = 'The details did not match our records. Please check and try again.';
+    return;
+  }
+  psSetLock({ n: 0, until: 0 });
+  psVerifiedCode = String(found.emp_code).trim().toUpperCase();
+  document.getElementById('ps-v1').value = ''; document.getElementById('ps-v2').value = '';
+  psShowSlip();
+}
+
+function psLogout() { psVerifiedCode = null; psShowGate(); }
+
+// Months in which this employee has a saved record, latest first.
+function psMonthsFor(code) {
+  return Object.keys(cloudCache.months).filter(m => (cloudCache.months[m] || []).some(e => String(e.emp_code || '').trim().toUpperCase() === code))
+    .sort((a, b) => monthKeyToIndex(b) - monthKeyToIndex(a));
+}
+function psRecord(code, m) {
+  return (cloudCache.months[m] || []).find(e => String(e.emp_code || '').trim().toUpperCase() === code);
+}
+
+function psShowSlip() {
+  document.getElementById('ps-gate').style.display = 'none';
+  document.getElementById('ps-view').style.display = '';
+  psRender(true);
+}
+
+function psRender(resetMonth) {
+  if (!psVerifiedCode) return;
+  const months = psMonthsFor(psVerifiedCode);
+  const sel = document.getElementById('ps-month');
+  const old = sel.value;
+  sel.innerHTML = months.map(m => `<option value="${m}">${m.replace('-', ' ')}</option>`).join('');
+  if (!months.length) {
+    document.getElementById('ps-slip').innerHTML = '<div class="payslip" style="text-align:center;">No salary record has been saved for you yet.</div>';
+    document.getElementById('ps-fy').innerHTML = '';
+    return;
+  }
+  sel.value = (!resetMonth && months.includes(old)) ? old : months[0];
+  const m = sel.value;
+  const c = getCalculatedStaff(psRecord(psVerifiedCode, m), loadMonthConfig(m), m);
+  document.getElementById('ps-slip').innerHTML = psSlipHTML(c, m);
+
+  // Month-wise summary for the same financial year (Mar - Feb)
+  const fyMonths = fyMonthsList(fyStartOfMonth(m)).filter(x => months.includes(x));
+  let tg = 0, td = 0, tn = 0;
+  const rows = fyMonths.map(x => {
+    const r = getCalculatedStaff(psRecord(psVerifiedCode, x), loadMonthConfig(x), x);
+    tg += r.calculatedGross; td += r.calculatedTotalDed; tn += r.calculatedNet;
+    return `<tr${x === m ? ' style="background:#fffbea;"' : ''}><td>${x.replace('-', ' ')}</td><td class="num">${psFmt(r.calculatedGross)}</td><td class="num">${psFmt(r.calculatedTotalDed)}</td><td class="num bold">${psFmt(r.calculatedNet)}</td><td class="center"><button class="btn btn-outline" style="padding:3px 9px;font-size:11px;" onclick="document.getElementById('ps-month').value='${x}';psRender();window.scrollTo(0,0);">View</button></td></tr>`;
+  }).join('');
+  document.getElementById('ps-fy').innerHTML = `
+    <h3 style="margin:0 0 8px;color:var(--primary);font-size:14px;">Month-wise summary — F.Y. ${fyLabel(fyStartOfMonth(m))}</h3>
+    <table class="sheet-table" style="max-width:640px;font-size:12px;">
+      <thead><tr><th>Month</th><th>Gross (Rs.)</th><th>Deductions (Rs.)</th><th>Net Pay (Rs.)</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="subtotal-row"><td>Total</td><td class="num">${psFmt(tg)}</td><td class="num">${psFmt(td)}</td><td class="num">${psFmt(tn)}</td><td></td></tr></tfoot>
+    </table>`;
+}
+
+function psSlipHTML(c, month) {
+  const earn = [
+    ['Basic Pay', Number(c.basic) || 0],
+    ['Dearness Allowance (D.A.)', c.calculatedDA],
+    ['House Rent Allowance (H.R.A.)', c.calculatedHRA],
+    ['Medical Allowance (M.A.)', c.calculatedMA]
+  ];
+  if (Number(c.addl)) earn.push(['Addl. Remuneration', Number(c.addl)]);
+  if (c.calculatedBonus) earn.push(['Bonus', c.calculatedBonus]);
+  if (c.calculatedArrear) earn.push(['Arrear' + (c.arrearNote ? ' (' + psEsc(c.arrearNote) + ')' : ''), c.calculatedArrear]);
+  const ded = [
+    ['General Provident Fund (G.P.F.)', Number(c.gpf) || 0],
+    ['Professional Tax (P.Tax)', c.calculatedPTax],
+    ['Income Tax (I.Tax / TDS)', c.calculatedITax]
+  ];
+  const n = Math.max(earn.length, ded.length);
+  let body = '';
+  for (let i = 0; i < n; i++) {
+    const e = earn[i], d = ded[i];
+    body += `<tr><td>${e ? e[0] : '&nbsp;'}</td><td class="amt">${e ? psFmt(e[1]) : ''}</td><td>${d ? d[0] : ''}</td><td class="amt">${d ? psFmt(d[1]) : ''}</td></tr>`;
+  }
+  return `
+  <div class="payslip">
+    <div class="ps-head">
+      <h2>Taldangra Fulmati High School [H.S.]</h2>
+      <p>P.O. Taldangra, Sub Div. Khatra, Dist. Bankura, West Bengal - 722152</p>
+    </div>
+    <div class="ps-title">PAY SLIP FOR THE MONTH OF ${psEsc(month.replace('-', ' ').toUpperCase())}</div>
+    <table class="ps-id">
+      <tr><td><b>Name:</b> ${psEsc(c.name)}</td><td><b>Designation:</b> ${psEsc(c.desig)}</td></tr>
+      <tr><td><b>Employee Code:</b> ${psEsc(c.emp_code || 'N.A.')}</td><td><b>PAN:</b> ${psEsc(c.pan || 'N.A.')}</td></tr>
+      <tr><td><b>Pay Level / Cell:</b> ${psEsc(c.level || '-')} / ${psEsc(c.cell || '-')}</td><td><b>Approval No. &amp; Date:</b> ${psEsc(c.approval || 'N.A.')}</td></tr>
+      <tr><td><b>Date of Joining (School):</b> ${psEsc(formatDateDDMMYYYY(c.doj_school || c.doj_service))}</td><td><b>Date of Retirement:</b> ${psEsc(formatDateDDMMYYYY(c.dor))}</td></tr>
+    </table>
+    <table>
+      <thead><tr><th style="width:30%;">Earnings</th><th style="width:20%;text-align:right;">Amount (Rs.)</th><th style="width:30%;">Deductions</th><th style="width:20%;text-align:right;">Amount (Rs.)</th></tr></thead>
+      <tbody>
+        ${body}
+        <tr class="ps-total"><td>GROSS SALARY</td><td class="amt">${psFmt(c.calculatedGross)}</td><td>TOTAL DEDUCTIONS</td><td class="amt">${psFmt(c.calculatedTotalDed)}</td></tr>
+        <tr class="ps-net"><td colspan="3">NET PAY</td><td class="amt">${psFmt(c.calculatedNet)}</td></tr>
+      </tbody>
+    </table>
+    <p style="margin:6px 0;"><b>Net Pay (in words):</b> Rupees ${numberToWordsINR(c.calculatedNet)}.</p>
+    <div class="ps-foot">This is a computer-generated pay slip. For official use, please obtain the Headmaster / HOI's signature and seal.</div>
+  </div>`;
+}
+
 function renderAll() {
+  if (psVerifiedCode && document.getElementById('tab-payslip').classList.contains('active')) psRender();
   renderAroll();
   renderPayCertOptions();
   renderLPCOptions();
