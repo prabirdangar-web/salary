@@ -265,7 +265,7 @@
   }
 </style>
 </head>
-<body>
+<body class="guard-locked">
 
 <div id="syncStatus" style="position:fixed;bottom:10px;right:10px;background:#0f172a;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;z-index:999;box-shadow:0 2px 6px rgba(0,0,0,.2);" class="no-print">Connecting…</div>
 
@@ -290,10 +290,10 @@
 <!-- ADMIN LOGIN PANEL (view-only for everyone unless logged in) -->
 <div id="authPanel" class="no-print" style="position:fixed;top:10px;right:10px;z-index:999;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:12px;width:210px;">
   <div id="authLoggedOut">
-    <div style="font-weight:700;margin-bottom:6px;">🔒 View Only Mode</div>
+    <div style="font-weight:700;margin-bottom:6px;">🔒 Admin Login <span style="font-weight:400;color:#718096;">(full portal)</span></div>
     <input type="email" id="authEmail" placeholder="Admin email" style="width:100%;margin-bottom:5px;padding:5px;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;">
     <input type="password" id="authPass" placeholder="Password" style="width:100%;margin-bottom:5px;padding:5px;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;" onkeydown="if(event.key==='Enter')adminLogin();">
-    <button class="btn btn-primary" style="width:100%;padding:7px;font-size:11px;" onclick="adminLogin()">Login to Edit</button>
+    <button class="btn btn-primary" style="width:100%;padding:7px;font-size:11px;" onclick="adminLogin()">Login</button>
     <div id="authError" style="color:#b91c1c;font-size:10.5px;margin-top:4px;"></div>
   </div>
   <div id="authLoggedIn" style="display:none;">
@@ -302,9 +302,25 @@
   </div>
 </div>
 <style>
+  /* ===== Access guard: link opens ONLY the input interface until verified ===== */
+  .guard-brand{display:none;text-align:center;padding:22px 12px 0;}
+  .guard-brand h1{margin:0;font-size:20px;color:var(--primary);}
+  .guard-brand p{margin:4px 0 0;font-size:12px;color:#718096;}
+  body.guard-locked .guard-brand, body.staff-only .guard-brand{display:block;}
+  body.guard-locked .navbar, body.guard-locked #top-controls,
+  body.staff-only .navbar, body.staff-only #top-controls, body.staff-only #authPanel{display:none !important;}
+  body.guard-locked .tab-content, body.staff-only .tab-content{display:none !important;}
+  body.guard-locked #tab-payslip, body.staff-only #tab-payslip{display:block !important;}
+  body.guard-locked #ps-view{display:none !important;}
+  body.guard-locked #authPanel{position:static !important;width:auto !important;max-width:460px;margin:0 auto 30px !important;box-sizing:border-box;}
   .admin-only{display:none;}
   body.is-admin .admin-only{display:inline-block;}
 </style>
+
+<div class="guard-brand no-print">
+  <h1>Taldangra Fulmati High School [H.S.] - Salary Portal</h1>
+  <p>Verify your identity to continue</p>
+</div>
 
 <div class="navbar no-print">
   <div><h1>Taldangra Fulmati High School [H.S.] - Salary Portal</h1></div>
@@ -919,9 +935,15 @@ function setSyncStatus(text, color){
 }
 
 /* ---- Admin login/logout (Firebase Authentication) ---- */
+function applyGuard(){
+  const b = document.body;
+  b.classList.toggle('guard-locked', !isAdmin && !psVerifiedCode);
+  b.classList.toggle('staff-only', !isAdmin && !!psVerifiedCode);
+}
 auth.onAuthStateChanged((user)=>{
   isAdmin = !!user;
   document.body.classList.toggle('is-admin', isAdmin);
+  applyGuard();
   document.getElementById('authLoggedOut').style.display = isAdmin ? 'none' : '';
   document.getElementById('authLoggedIn').style.display = isAdmin ? '' : 'none';
 });
@@ -2183,10 +2205,11 @@ function psVerify() {
   psSetLock({ n: 0, until: 0 });
   psVerifiedCode = String(found.emp_code).trim().toUpperCase();
   document.getElementById('ps-v1').value = ''; document.getElementById('ps-v2').value = '';
+  applyGuard();
   psShowSlip();
 }
 
-function psLogout() { psVerifiedCode = null; psShowGate(); }
+function psLogout() { psVerifiedCode = null; psShowGate(); applyGuard(); }
 
 // Months in which this employee has a saved record, latest first.
 function psMonthsFor(code) {
@@ -2290,6 +2313,9 @@ function renderAll() {
   renderLPCOptions();
   renderStaffTable();
 }
+
+// Guard: the gate inputs must be ready as soon as the link opens (before any tab is clicked)
+psFactorChanged(); psShowGate();
 
 // Initial population of months/staffData/config now happens inside
 // refreshAfterCloudUpdate(), which runs every time the Firestore document
