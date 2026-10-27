@@ -327,6 +327,57 @@
     .controls-card { margin:10px !important; }
     .itx-sheet table, .payslip table { font-size:11.5px; }
   }
+  /* ===== iOSMS-style Salary Requisition ===== */
+  @page req { size: A4 landscape; margin: 6mm; }
+  .req-wrap { overflow-x:auto; padding:4px 0 20px; }
+  .req-page { background:#fff; width:1120px; margin:0 auto 18px; padding:10px 14px 8px; box-shadow:0 1px 6px rgba(0,0,0,.18); font-family:Arial,Helvetica,sans-serif; color:#000; display:flex; flex-direction:column; min-height:700px; }
+  .req-logo { text-align:right; font-style:italic; font-weight:bold; font-size:20px; color:#2b6cb0; letter-spacing:.5px; height:24px; }
+  .req-t { width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px; border:1px solid #555; }
+  .req-t th, .req-t td { border:1px solid #666; padding:3px 2px; text-align:center; word-wrap:break-word; }
+  .req-t th { background:#f1f1f1; font-weight:bold; font-size:8.5px; }
+  .req-t th.req-title { background:#fff; font-size:13px; padding:5px; }
+  .req-t td.l { text-align:left; padding-left:4px; }
+  .req-t td.r { text-align:right; padding-right:3px; }
+  .req-t tr.req-tot td { font-weight:bold; background:#f7f7f7; }
+  .req-t td.ap small { display:block; font-size:8px; }
+  .req-legend { border:1px solid #555; background:#f1f1f1; font-size:9px; padding:5px 6px; margin-top:18px; line-height:1.45; }
+  .req-cert { border:1px solid #555; margin-top:14px; font-size:9.5px; }
+  .req-cert div { border-bottom:1px solid #999; padding:5px 6px; }
+  .req-cert div.req-blank { height:46px; }
+  .req-sigs { display:flex; border:1px solid #555; border-top:none; font-size:9.5px; background:#f1f1f1; }
+  .req-sigs div { padding:5px 6px; border-right:1px solid #999; }
+  .req-sigs div:nth-child(1){flex:0 0 36%;} .req-sigs div:nth-child(2){flex:0 0 28%;} .req-sigs div:nth-child(3){flex:1;border-right:none;}
+  .req-status { border:1px solid #555; border-top:none; background:#f1f1f1; font-size:9.5px; padding:5px 6px; }
+  .req-foot { margin-top:auto; padding-top:10px; border-top:1px solid #555; display:flex; justify-content:space-between; font-size:9.5px; font-style:italic; font-weight:bold; }
+  .req-edit input { width:100%; padding:3px 4px; border:1px solid var(--border-color); border-radius:3px; font-size:11px; }
+  .req-edit table { border-collapse:collapse; width:100%; font-size:11.5px; }
+  .req-edit th, .req-edit td { border:1px solid var(--border-color); padding:3px 4px; }
+  .req-edit th { background:#edf2f7; text-align:left; }
+  @media print {
+    #tab-requisition { page: req; }
+    #tab-requisition .req-wrap { overflow:visible !important; padding:0; }
+    .req-page { box-shadow:none !important; width:100% !important; margin:0 !important; padding:0 !important; height:196mm; min-height:0; overflow:hidden; page-break-after:always; break-after:page; }
+    .req-page.req-last { page-break-after:auto; break-after:auto; }
+    .req-t { font-size:7.4px; }
+    .req-t th { font-size:7px; }
+    .req-t th.req-title { font-size:11px; }
+    .req-t th, .req-t td { padding:2px 1px; }
+    .req-t td.ap small { font-size:6.6px; }
+    .req-legend, .req-cert, .req-sigs, .req-status, .req-foot { font-size:8px; }
+    .req-legend { margin-top:14px; }
+    .req-logo { font-size:17px; height:20px; }
+  }
+  /* Mobile app: make admin tabs / login reachable */
+  .staff-app.show-admin #authPanel { display:block !important; }
+  .ps-adminlink { display:none; margin-top:12px; text-align:center; font-size:12px; }
+  .staff-app .ps-adminlink { display:block; }
+  .ps-adminlink a { color:#2b6cb0; text-decoration:underline; cursor:pointer; }
+  @media (max-width:640px) {
+    .navbar { padding-right:12px !important; flex-direction:column; align-items:flex-start; gap:8px; }
+    .nav-tabs { flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+    .nav-tab { white-space:nowrap; flex:0 0 auto; }
+    body.is-admin #authPanel { position:static !important; width:auto !important; margin:8px 10px !important; }
+  }
 </style>
 </head>
 <body class="guard-locked">
@@ -397,6 +448,7 @@
     <button class="nav-tab" onclick="switchTab('fy')">📅 FY Report</button>
     <button class="nav-tab" onclick="switchTab('payslip')">🧾 My Pay Slip</button>
     <button class="nav-tab admin-only" onclick="switchTab('itaxadmin')">💰 I.Tax (Admin)</button>
+    <button class="nav-tab admin-only" onclick="switchTab('requisition')">📋 Salary Requisition (iOSMS)</button>
   </div>
 </div>
 
@@ -673,6 +725,7 @@
       <button type="button" id="ps-install" class="btn btn-outline ps-install" onclick="psInstallApp()">📲 Install this app on my phone</button>
       <div id="ps-install-hint" class="ps-install-hint">📲 To install on iPhone: tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>.</div>
       <div id="ps-error"></div>
+      <div class="ps-adminlink"><a onclick="psShowAdminLogin()">🔒 Admin login (Salary Requisition &amp; full portal)</a></div>
     </div>
 
     <div id="ps-view" style="display:none;">
@@ -700,6 +753,31 @@
       <div id="ps-cert"></div>
       <div id="ps-fy" class="table-responsive no-print"></div>
     </div>
+  </div>
+
+  <!-- ================= ADMIN: SALARY REQUISITION (iOSMS format) ================= -->
+  <div id="tab-requisition" class="tab-content">
+    <div class="controls-card no-print" style="margin:0 0 12px 0;">
+      <div class="control-group">
+        <label>Rows per page</label>
+        <input type="number" id="req-rpp" value="10" min="5" max="14" style="width:70px;" onchange="renderRequisition(true)">
+      </div>
+      <div class="control-group">
+        <label>Status line</label>
+        <select id="req-status" onchange="renderRequisition(true)">
+          <option value="Salary Requisition Not Finalized" selected>Not Finalized</option>
+          <option value="Salary Requisition Finalized">Finalized</option>
+          <option value="">(none)</option>
+        </select>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="document.getElementById('req-edit').style.display = document.getElementById('req-edit').style.display==='none' ? '' : 'none'">✏️ Bank / DOA / Approval details</button>
+        <button class="btn btn-primary" onclick="saveMonthData()">💾 Save Month Data</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save PDF (A4 Landscape)</button>
+      </div>
+    </div>
+    <div id="req-edit" class="req-edit controls-card no-print" style="display:none;margin:0 0 12px 0;overflow-x:auto;display:none;"></div>
+    <div id="req-pages" class="req-wrap"></div>
   </div>
 
   <!-- ================= ADMIN: INCOME TAX SHEET (dropdown mode) ================= -->
@@ -1511,6 +1589,7 @@ function switchTab(tabId) {
   document.getElementById('tab-' + tabId).classList.add('active');
   document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin') ? 'none' : '';
   if (tabId === 'itaxadmin') itxaInit();
+  if (tabId === 'requisition') renderRequisition();
   if (tabId === 'payslip') initPaySlipTab();
   
   if (tabId === 'paycert') renderPayCertOptions();
@@ -2861,7 +2940,143 @@ function renderAll() {
   renderPayCertOptions();
   renderLPCOptions();
   renderStaffTable();
+  const rq=document.getElementById('tab-requisition'); if (rq && rq.classList.contains('active')) { document.getElementById('req-edit').innerHTML=''; renderRequisition(); }
 }
+
+/* ===== iOSMS-style Salary Requisition ===== */
+const REQ_SCHOOL = 'TALDANGRA FULMOTI H S';
+const REQ_TYPE = 'NON-SSA SCHOOL';
+const REQ_UDISE = '19132104401', REQ_OSMS = '2007277';
+// Seed from the iOSMS requisition PDF: [order, DOA, Appvl No, Appvl Date, IFSC, A/C No]
+const REQ_SEED = {
+ 'PRABIR KUMAR DANGAR':[1,'25-07-2019','2252/S','02-08-2019','SBIN0012397','31820689053'],
+ 'SWAPAN KUMAR MAJI':[2,'01-01-1992','2540/S','31-07-1997','WBSC0BDCB13','606113011510'],
+ 'PARTHA KUMAR PATRA':[3,'04-10-2007','3295/S','29-10-2007','SBIN0012397','31813246260'],
+ 'MAHIM KUMAR PAINE':[4,'11-09-2008','3881/S','31-10-2008','SBIN0012397','31813735578'],
+ 'KABITA MANDAL':[5,'13-09-2008','3881/S','31-10-2008','SBIN0012397','31813246419'],
+ 'TAPAS KUNDU':[6,'30-01-2009','585/S','24-02-2009','SBIN0012397','31813246248'],
+ 'KANTI MALLA':[7,'03-10-2008','2246/S','24-11-2021','PUNB0199720','0475000400114352'],
+ 'MRINMAYEE CHAKRABORTY':[8,'27-10-2009','127/S','11-01-2010','SBIN0012397','31813246351'],
+ 'BIDHAN CHANDRA GHOSH':[9,'01-09-2009','2711/S','08-10-2009','WBSC0BDCB13','606113073702'],
+ 'PARTHA MISHRA':[10,'02-12-2013','4802/S','08-12-2017','SBIN0012397','33519542306'],
+ 'SAHADEB BASKEY':[11,'05-07-2011','2309/S','29-07-2011','SBIN0012397','31865502687'],
+ 'TANMOY CHAKRABORTY':[12,'01-07-2011','2189/S','25-07-2011','SBIN0012397','31857635436'],
+ 'SUJATA MAHATA':[13,'29-11-2013','51/S','03-01-2014','SBIN0012397','33564888931'],
+ 'BELA MAHATA':[14,'23-12-2014','204/S','16-01-2015','SBIN0015937','33939326386'],
+ 'PAPIYA MAJI':[15,'11-09-2018','3762/S','05-10-2018','SBIN0012397','30877220924'],
+ 'SUMANTA MANDAL':[16,'12-09-2018','3762/S','05-10-2018','SBIN0012397','32954705022'],
+ 'SAMPA PATI':[17,'09-01-2019','278/S','28-01-2019','SBIN0015938','35134288565'],
+ 'ANTARA GHORAI':[18,'11-04-2005','543/S','02-03-2021','WBSC0BDCB16','110001002516'],
+ 'MALATI TUDU':[19,'26-02-2021','712/S','10-03-2021','SBIN0012394','20135081353'],
+ 'SASANKA SAREN':[20,'26-02-2021','712/S','10-03-2021','SBIN0012397','32089761501'],
+ 'SWAPNA MAHANTI':[21,'07-09-2009','1787/S','05-10-2021','PUNB0RRBBGB','5498019000122'],
+ 'SABYASACHI MANDAL':[22,'20-09-2007','66/S','06-01-2022','WBSC0BDCB15','606115050692'],
+ 'SHEPHALI MAJI':[23,'02-05-2001','1953/S','04-07-2022','PUNB0RRBBGB','5325010008037'],
+ 'DIPTIMAN SAHA':[24,'24-09-2008','1954/S','04-07-2022','PUNB0019620','0196010187688'],
+ 'TUHIN SUBHRA PATRA':[25,'05-04-2012','1793/S','05-10-2021','SBIN0010092','32417272078'],
+ 'SUBHENDU KARMAKAR':[26,'14-03-2000','1220/S','04-05-2000','SBIN0012397','31813735590'],
+ 'TAPAN KUMAR DIYASI':[27,'14-03-1995','1086/S','03-05-1995','SBIN0012397','31813246168'],
+ 'NIRANJAN MURMU':[28,'12-05-1998','1403/S','23-07-1998','SBIN0012397','31813246408'],
+ 'PRAKASH SARDAR':[29,'21-11-2012','4848/S','31-12-2012','SBIN0012397','32747959801']
+};
+function reqNorm(n){ return String(n||'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function reqDmy(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m ? m[3]+'-'+m[2]+'-'+m[1] : (iso||''); }
+function reqDesig(d){
+  d = String(d||'').toUpperCase();
+  if (d==='HEADMASTER') return 'HM';
+  if (d==='ASSISTANT HEADMASTER') return 'AHM';
+  if (d==='ASSISTANT TEACHER') return 'AT';
+  if (d.indexOf('GR.D')===0 || d.indexOf('GROUP D')===0) return 'GROUP D';
+  return d;
+}
+function reqSeedStaff(){
+  (staffData||[]).forEach(e => {
+    if (e.ifsc !== undefined) return;
+    const s = REQ_SEED[reqNorm(e.name)];
+    if (s) { e.req_doa=s[1]; e.req_apno=s[2]; e.req_apdt=s[3]; e.ifsc=s[4]; e.acno=s[5]; }
+    else {
+      const m = /^\s*(.*?\/S)\s*;?\s*(\d.*)$/.exec(e.approval||'');
+      e.req_doa = reqDmy(e.doj_school); e.req_apno = m? m[1].trim() : (e.approval||''); e.req_apdt = m? m[2].trim() : '';
+      e.ifsc = ''; e.acno = '';
+    }
+    e.ropa = e.ropa || 'ROPA-2019';
+  });
+}
+function reqSet(i, f, v){ if (!staffData[i]) return; staffData[i][f] = v; renderRequisition(true); }
+function reqEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function renderRequisition(keepEdit) {
+  const host = document.getElementById('req-pages'); if (!host) return;
+  reqSeedStaff();
+  const rpp = Math.max(5, Math.min(14, parseInt(document.getElementById('req-rpp').value,10) || 10));
+  const status = document.getElementById('req-status').value;
+  const pickerVal = document.getElementById('cfgMonthPicker').value || '2026-07';
+  const monthLabel = formatMonthPickerToDisplay(pickerVal).replace('-', ' ');
+  const n0 = v => Math.round(v||0);
+  const rows = staffData.map((e,i) => ({ e, i, c: getCalculatedStaff(e) }))
+    .sort((a,b) => {
+      const oa = (REQ_SEED[reqNorm(a.e.name)]||[1000+a.i])[0], ob = (REQ_SEED[reqNorm(b.e.name)]||[1000+b.i])[0];
+      return oa - ob;
+    });
+
+  // Editable bank / DOA / approval details (admin)
+  if (!keepEdit || !document.getElementById('req-edit').innerHTML) {
+    document.getElementById('req-edit').innerHTML = '<div style="width:100%"><b>Bank / DOA / Approval details</b> <span style="color:#718096;font-size:11px;">(shown in the requisition; click <b>Save Month Data</b> to keep)</span>' +
+      '<table><tr><th>#</th><th>Name</th><th>DOA</th><th>Appvl No</th><th>Appvl Date</th><th>ROPA</th><th>IFSC</th><th>Account No.</th></tr>' +
+      rows.map((r,k) => `<tr><td>${k+1}</td><td>${reqEsc(r.e.name)}</td>` +
+        ['req_doa','req_apno','req_apdt','ropa','ifsc','acno'].map(f => `<td><input value="${reqEsc(r.e[f])}" oninput="reqSet(${r.i},'${f}',this.value)"></td>`).join('') + '</tr>').join('') +
+      '</table></div>';
+  }
+
+  const T = { bp:0, addl:0, da:0, hra:0, ma:0, arr:0, gross:0, gpf:0, pt:0, it:0, net:0 };
+  const cells = rows.map((r,k) => {
+    const e=r.e, c=r.c;
+    const addl = n0((parseFloat(e.addl)||0) + (c.calculatedBonus||0));
+    const v = { bp:n0(parseFloat(e.basic)||0), addl, da:n0(c.calculatedDA), hra:n0(c.calculatedHRA), ma:n0(c.calculatedMA), arr:n0(c.calculatedArrear),
+      gross:c.calculatedGross, gpf:n0(parseFloat(e.gpf)||0), pt:n0(c.calculatedPTax), it:n0(c.calculatedITax), net:n0(c.calculatedNet) };
+    Object.keys(T).forEach(x => T[x] += v[x]);
+    return { sl:k+1, e, v };
+  });
+  const head = `
+    <tr><th class="req-title" colspan="27">Salary Requisition of ${REQ_SCHOOL} for ${monthLabel} ( ${REQ_TYPE} )</th></tr>
+    <tr>
+      <th rowspan="2">SL.<br>No.</th><th rowspan="2">NAME</th><th rowspan="2">DOA</th><th rowspan="2">APPVL NO<br>&amp; DATE</th><th rowspan="2">ROPA<br>TYPE</th><th rowspan="2">IFSC</th><th rowspan="2">ACCOUNT NO.</th>
+      <th colspan="13">Pay &amp; Allowances</th><th rowspan="2">Gross<br>Salary</th><th colspan="5">Deductions</th><th rowspan="2">Net<br>Salary</th>
+    </tr>
+    <tr>
+      <th>PAY<br>IN<br>PB</th><th>GP</th><th>AGP</th><th>BP</th><th>TICA</th><th>ADDL.<br>ALLOW</th><th>DA</th><th>HRA</th><th>MA</th><th>CA</th><th>CPF</th><th>DA<br>ARREAR</th><th>OVER<br>DRAWN</th>
+      <th>GPF</th><th>PFL</th><th>CPF</th><th>PT</th><th>IT</th>
+    </tr>`;
+  const colgroup = '<colgroup>' + [2.2,11,5,5.2,4.4,6.2,7.4, 2.4,1.8,1.8,4.2,2,3.4,4.2,4,3,1.8,1.8,3.4,3.4, 5.2, 3.8,1.8,1.8,2.6,3.2, 4.6]
+    .map(w=>`<col style="width:${w}%">`).join('') + '</colgroup>';
+  const legend = `<b>DOA</b> = Date of Appointment in present school/post, <b>PAY IN PB</b> = Pay in Pay Band, <b>GP</b> = Grade Pay,<b>AGP</b> = Additional Grade Pay (For HM/AHM), <b>TICA</b> = TIC Allowance, <b>BP</b> = Basic Pay (PAY IN PB+GP+AGP+TICA),<br><b>CA</b> = Conveyance Allowance (for Physically challenged), <b>GPF</b> = General Provident Fund, <b>CPF</b> = Contributory Provident Fund, <b>PFL</b> = PF Loan Repayment, <b>PT</b> = Profession Tax, <b>IT</b> = Income Tax`;
+  const cert = `<div>i) Certified that the claim in this bill was not drawn before &amp; said claim has been calculated against the approved teaching and non-teaching staff.</div>
+    <div>ii) Certified that none of the incumbent has drawn HRA (both husband and wife) exceeding Rs. 6000(for ROPA-09) / Rs. 12000(for ROPA-19) per month.</div>
+    <div>iii) This bill is prepared as per applicable ROPAs, G/A rules and proper verification of monthly attendance and leave registers of each employee strictly.</div>
+    <div class="req-blank"></div>`;
+  const pages = [];
+  for (let s = 0; s < cells.length; s += rpp) pages.push(cells.slice(s, s+rpp));
+  if (!pages.length) pages.push([]);
+  const money = x => x.toLocaleString('en-US').replace(/,/g,'');
+  host.innerHTML = pages.map((pg, pi) => {
+    const last = pi === pages.length - 1;
+    const body = pg.map(r => { const e=r.e, v=r.v; return `<tr>
+      <td>${r.sl}</td><td class="l">${reqEsc(e.name)} ( ${reqEsc(reqDesig(e.desig))} )</td><td>${reqEsc(e.req_doa)}</td>
+      <td class="ap">${reqEsc(e.req_apno)}<small>${reqEsc(e.req_apdt)}</small></td><td>${reqEsc(e.ropa)}</td><td>${reqEsc(e.ifsc)}</td><td>${reqEsc(e.acno)}</td>
+      <td>0</td><td>0</td><td>0</td><td class="r">${v.bp}</td><td>0</td><td class="r">${v.addl}</td><td class="r">${v.da}</td><td class="r">${v.hra}</td><td class="r">${v.ma}</td><td>0</td><td>0</td><td class="r">${v.arr}</td><td>0</td>
+      <td class="r">${v.gross.toFixed(2)}</td><td class="r">${v.gpf}</td><td>0</td><td>0</td><td class="r">${v.pt}</td><td class="r">${v.it}</td><td class="r">${v.net}</td></tr>`; }).join('');
+    const tot = last ? `<tr class="req-tot"><td colspan="7">TOTAL</td><td>0</td><td>0</td><td>0</td><td class="r">${T.bp}</td><td>0</td><td class="r">${T.addl}</td><td class="r">${T.da}</td><td class="r">${T.hra}</td><td class="r">${T.ma}</td><td>0</td><td>0</td><td class="r">${T.arr}</td><td>0</td><td class="r">${T.gross.toFixed(0)}</td><td class="r">${T.gpf}</td><td>0</td><td>0</td><td class="r">${T.pt}</td><td class="r">${T.it}</td><td class="r">${T.net}</td></tr>` : '';
+    return `<div class="req-page${last?' req-last':''}">
+      <div class="req-logo">i-OSMS<sub style="font-size:10px;">V2</sub></div>
+      <table class="req-t">${colgroup}<thead>${head}</thead><tbody>${body}${tot}</tbody></table>
+      <div class="req-legend">${legend}</div>
+      <div class="req-cert">${cert}</div>
+      <div class="req-sigs"><div>Signature of President / Secretary / Administrator</div><div>Signature of the Head of the Institution</div><div>Signature of DIS(SE) / ADIS(SE)</div></div>
+      ${status ? `<div class="req-status">${reqEsc(status)}</div>` : ''}
+      <div class="req-foot"><span>https://banglarshiksha.wb.gov.in/iosms</span><span>UDISE CODE : ${REQ_UDISE}, OSMS SCHOOL CODE : ${REQ_OSMS}</span><span>${pi+1}</span></div>
+    </div>`;
+  }).join('');
+}
+function psShowAdminLogin(){ document.documentElement.classList.add('show-admin'); const p=document.getElementById('authPanel'); if(p) p.scrollIntoView({behavior:'smooth'}); }
 
 // Guard: the gate inputs must be ready as soon as the link opens (before any tab is clicked)
 psFactorChanged(); psShowGate();
