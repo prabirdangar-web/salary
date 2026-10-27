@@ -263,6 +263,44 @@
     #tab-payslip .payslip { box-shadow: none !important; border: 1px solid #000 !important; margin: 0 auto !important; }
     #ps-gate { display: none !important; }
   }
+
+  /* ===== Pay Slip view modes: I.Tax sheet + Salary Certificate ===== */
+  .ps-modes { display:flex; gap:6px; flex-wrap:wrap; }
+  .ps-modebtn { background:#fff; border:1.5px solid var(--primary-light); color:var(--primary); padding:8px 14px; border-radius:20px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .ps-modebtn:hover { background:#ebf4ff; }
+  .ps-modebtn.active { background:var(--primary-light); color:#fff; }
+  .ps-hint { max-width:780px; margin:0 auto 12px; background:#fffbea; border:1px solid var(--accent); border-radius:6px; padding:10px 14px; font-size:12.5px; line-height:1.5; }
+  .itx-in { max-width:780px; margin:0 auto 14px; background:#fff; border-radius:8px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .itx-in h4 { margin:0 0 4px; color:var(--primary); font-size:13.5px; }
+  .itx-in p { margin:0 0 10px; font-size:11.5px; color:#718096; }
+  .itx-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px 12px; }
+  .itx-grid label { display:block; font-size:10.5px; font-weight:600; color:#718096; text-transform:uppercase; margin-bottom:2px; }
+  .itx-grid input { width:100%; padding:5px 7px; border:1px solid var(--border-color); border-radius:4px; font-size:12.5px; }
+  .itx-sheet { background:#fff; max-width:780px; margin:0 auto 20px; padding:24px 28px; border:1.5px solid #2d3748; border-radius:6px; font-family:'Times New Roman',Times,serif; font-size:12px; }
+  .itx-sheet .ps-head { text-align:center; border-bottom:2px double #2d3748; padding-bottom:6px; margin-bottom:8px; }
+  .itx-sheet .ps-head h2 { margin:0 0 2px; font-size:17px; text-transform:uppercase; }
+  .itx-sheet .ps-head p { margin:1px 0; font-size:11px; }
+  .itx-sheet .ps-title { text-align:center; font-weight:bold; font-size:13.5px; text-decoration:underline; margin:8px 0; }
+  .itx-sheet table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+  .itx-sheet td, .itx-sheet th { border:1px solid #4a5568; padding:3px 6px; }
+  .itx-sheet th { background:#edf2f7; text-align:left; }
+  .itx-sheet td.amt { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .itx-sheet tr.itx-tot td { font-weight:bold; background:#e2e8f0; }
+  .itx-sheet tr.itx-fin td { font-weight:bold; background:#ebf8ff; color:#1a365d; }
+  .itx-sheet tr.itx-sub td { color:#4a5568; padding-left:16px; }
+  .itx-sheet .ps-id td { border:none; padding:2px 5px; }
+  .itx-sheet .itx-rec { display:inline-block; background:#38a169; color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; margin-left:4px; font-family:sans-serif; }
+  .itx-sheet .itx-note { font-size:10.5px; color:#4a5568; margin:4px 0; }
+  .itx-sig { display:flex; justify-content:space-between; gap:20px; margin-top:42px; }
+  .itx-sig div { flex:1; text-align:center; border-top:1px solid #000; padding-top:3px; font-size:11.5px; }
+  .cert-foot { max-width:780px; margin:6px auto 20px; text-align:center; font-size:10.5px; color:#4a5568; font-family:'Times New Roman',serif; }
+  #ps-cert .certificate-card { margin:0 auto; }
+  @media print {
+    #ps-cert .certificate-card { page-break-after:auto !important; }
+    .itx-sheet { box-shadow:none !important; border:1px solid #000 !important; margin:0 auto !important; padding:10px 14px !important; }
+    .itx-sheet.ps-pagebreak { page-break-before:always; break-before:page; }
+    #ps-slip { margin-bottom:0; }
+  }
 </style>
 </head>
 <body class="guard-locked">
@@ -614,12 +652,23 @@
           <label>Salary Month</label>
           <select id="ps-month" onchange="psRender()" style="min-width:170px;"></select>
         </div>
+        <div class="control-group">
+          <label>What do you want?</label>
+          <div class="ps-modes">
+            <button type="button" class="ps-modebtn active" data-mode="slip" onclick="psSetMode('slip')">🧾 Pay Slip</button>
+            <button type="button" class="ps-modebtn" data-mode="itax" onclick="psSetMode('itax')">💰 Add I.Tax Sheet</button>
+            <button type="button" class="ps-modebtn" data-mode="both" onclick="psSetMode('both')">🧾+💰 Pay Slip + I.Tax</button>
+            <button type="button" class="ps-modebtn" data-mode="cert" onclick="psSetMode('cert')">📜 Salary Certificate</button>
+          </div>
+        </div>
         <div style="margin-left:auto;display:flex;gap:8px;">
-          <button class="btn btn-primary" onclick="window.print()">🖨️ Print Pay Slip</button>
+          <button class="btn btn-primary" id="ps-printbtn" onclick="window.print()">🖨️ Print</button>
           <button class="btn btn-outline" onclick="psLogout()">🚪 Close / Exit</button>
         </div>
       </div>
       <div id="ps-slip"></div>
+      <div id="ps-itax"></div>
+      <div id="ps-cert"></div>
       <div id="ps-fy" class="table-responsive no-print"></div>
     </div>
   </div>
@@ -2355,7 +2404,7 @@ function psVerify() {
   psShowSlip();
 }
 
-function psLogout() { psVerifiedCode = null; psShowGate(); applyGuard(); }
+function psLogout() { psVerifiedCode = null; psTaxIn = {}; psTaxCtx = null; psMode = 'slip'; psShowGate(); applyGuard(); }
 
 // Months in which this employee has a saved record, latest first.
 function psMonthsFor(code) {
@@ -2381,12 +2430,16 @@ function psRender(resetMonth) {
   if (!months.length) {
     document.getElementById('ps-slip').innerHTML = '<div class="payslip" style="text-align:center;">No salary record has been saved for you yet.</div>';
     document.getElementById('ps-fy').innerHTML = '';
+    document.getElementById('ps-itax').innerHTML = ''; document.getElementById('ps-cert').innerHTML = '';
     return;
   }
   sel.value = (!resetMonth && months.includes(old)) ? old : months[0];
   const m = sel.value;
   const c = getCalculatedStaff(psRecord(psVerifiedCode, m), loadMonthConfig(m), m);
   document.getElementById('ps-slip').innerHTML = psSlipHTML(c, m);
+  psRenderTax(psVerifiedCode, m);
+  psRenderCert(c, m);
+  psApplyMode();
 
   // Month-wise summary for the same financial year (Mar - Feb)
   const fyMonths = fyMonthsList(fyStartOfMonth(m)).filter(x => months.includes(x));
@@ -2450,6 +2503,189 @@ function psSlipHTML(c, month) {
     <p style="margin:6px 0;"><b>Net Pay (in words):</b> Rupees ${numberToWordsINR(c.calculatedNet)}.</p>
     <div class="ps-foot">This is a computer-generated pay slip. For official use, please obtain the Headmaster / HOI's signature and seal.</div>
   </div>`;
+}
+
+/* ===== I.Tax sheet + Salary Certificate for the staff self-view ===== */
+let psMode = 'slip';
+let psTaxIn = {};      // declarations typed by the staff member (kept in memory only; cleared on exit)
+let psTaxCtx = null;   // { code, m, fy, rows }
+const PS_TAX_FIELDS = [
+  ['other','Other income (bank / FD interest)'], ['hbli','H.B. loan interest u/s 24(b) (max 2,00,000)'],
+  ['gis','GIS'], ['lic','LIC / Insurance premium'], ['hblp','H.B. loan principal'],
+  ['nsc','NSC / NSC interest'], ['ppf','PPF / PLI'], ['tuition','Tuition fees (2 children)'],
+  ['ssy','Sukanya Samriddhi'], ['nps1','80CCD(1) NPS'], ['nps1b','80CCD(1B) NPS (max 50,000)'],
+  ['d80d','80D Mediclaim (max 25,000)'], ['d80g','80G Donation'], ['dother','Other Chapter VI-A deduction']
+];
+function psR(n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); }
+
+function psSetMode(mode) { psMode = mode; psApplyMode(); }
+function psApplyMode() {
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('ps-slip', psMode === 'slip' || psMode === 'both');
+  show('ps-itax', psMode === 'itax' || psMode === 'both');
+  show('ps-cert', psMode === 'cert');
+  show('ps-fy', psMode === 'slip');
+  const sheet = document.querySelector('#ps-itax .itx-sheet');
+  if (sheet) sheet.classList.toggle('ps-pagebreak', psMode === 'both');
+  document.querySelectorAll('.ps-modebtn').forEach(b => b.classList.toggle('active', b.dataset.mode === psMode));
+  const lbl = { slip: '🖨️ Print Pay Slip', itax: '🖨️ Print I.Tax Sheet', both: '🖨️ Print Pay Slip + I.Tax', cert: '🖨️ Print Salary Certificate' };
+  const pb = document.getElementById('ps-printbtn'); if (pb) pb.textContent = lbl[psMode];
+}
+
+// Month-wise rows for the F.Y. of month m: saved months are actual, later months are projected from the latest saved month.
+function psFYRows(code, m) {
+  const keys = fyMonthsList(fyStartOfMonth(m));
+  let last = -1;
+  keys.forEach((k, i) => { if (psRecord(code, k)) last = i; });
+  return keys.map((k, i) => {
+    const rec = psRecord(code, k);
+    if (rec) return { k, proj: false, c: getCalculatedStaff(rec, loadMonthConfig(k), k) };
+    if (last >= 0 && i > last) {
+      const base = psRecord(code, keys[last]);
+      const clone = Object.assign({}, base, { bonus: 0, arrear: 0, addlPtax: 0, addlItax: 0, arrearNote: '' });
+      return { k, proj: true, c: getCalculatedStaff(clone, loadMonthConfig(k), k) };
+    }
+    return { k, proj: false, c: null };
+  });
+}
+
+// Same slabs / rebate / deduction rules as the Income Tax Calculator (itax.html), FY 2026-27.
+function psSlabNew(x) {
+  let t = 0;
+  [[400000, 800000, .05], [800000, 1200000, .10], [1200000, 1600000, .15], [1600000, 2000000, .20], [2000000, 2400000, .25], [2400000, Infinity, .30]]
+    .forEach(([a, b, r]) => { if (x > a) t += (Math.min(x, b) - a) * r; });
+  return t;
+}
+function psSlabOld(x) {
+  let t = 0;
+  [[250000, 500000, .05], [500000, 1000000, .20], [1000000, Infinity, .30]]
+    .forEach(([a, b, r]) => { if (x > a) t += (Math.min(x, b) - a) * r; });
+  return t;
+}
+function psTaxCompute(tot, inp) {
+  const n = k => parseFloat(inp[k]) || 0;
+  const sal = tot.gross, other = n('other'), hbl = Math.min(n('hbli'), 200000);
+  // New regime
+  const stdN = sal > 0 ? 75000 : 0, headN = Math.max(0, sal - stdN), gtiN = Math.max(0, headN + other - hbl);
+  const slabN = psSlabNew(gtiN); let finN = slabN;
+  if (gtiN <= 1200000) finN = 0; else if (gtiN < 1275000) { const ex = gtiN - 1200000; if (slabN > ex) finN = ex; }
+  const cessN = finN * 0.04, totN = finN + cessN;
+  // Old regime
+  const stdO = sal > 0 ? 50000 : 0, headO = Math.max(0, sal - tot.ptax - stdO), gtiO = Math.max(0, headO + other - hbl);
+  const sum80C = tot.gpf + n('gis') + n('lic') + n('hblp') + n('nsc') + n('ppf') + n('tuition') + n('ssy') + n('nps1');
+  const c80 = Math.min(150000, sum80C);
+  const otherVIA = Math.min(n('nps1b'), 50000) + Math.min(n('d80d'), 25000) + n('d80g') + n('dother');
+  const via = c80 + otherVIA, netO = Math.max(0, gtiO - via);
+  const slabO = psSlabOld(netO), finO = netO <= 500000 ? 0 : slabO;
+  const cessO = finO * 0.04, totO = finO + cessO;
+  return {
+    sal, other, hbl, sum80C, c80, otherVIA, via,
+    N: { std: stdN, head: headN, gti: gtiN, taxable: gtiN, slab: slabN, rebate: slabN - finN, cess: cessN, total: totN },
+    O: { std: stdO, head: headO, gti: gtiO, taxable: netO, slab: slabO, rebate: slabO - finO, cess: cessO, total: totO },
+    newBetter: totN <= totO
+  };
+}
+
+function psTaxInput(key, val) {
+  if (!psTaxCtx) return;
+  const id = psTaxCtx.code + '|' + psTaxCtx.fy;
+  psTaxIn[id] = psTaxIn[id] || {};
+  psTaxIn[id][key] = val;
+  psRenderTaxStatement();
+}
+
+function psRenderTax(code, m) {
+  const fy = fyLabel(fyStartOfMonth(m));
+  psTaxCtx = { code, m, fy, rows: psFYRows(code, m) };
+  const id = code + '|' + fy, cur = psTaxIn[id] || {};
+  const inputs = PS_TAX_FIELDS.map(([k, l]) =>
+    `<div><label>${l}</label><input type="number" min="0" step="1" value="${psEsc(cur[k] || '')}" oninput="psTaxInput('${k}', this.value)"></div>`).join('');
+  document.getElementById('ps-itax').innerHTML = `
+    <div class="itx-in no-print">
+      <h4>💰 Income Tax Sheet — F.Y. ${fy} (A.Y. ${(fyStartOfMonth(m) + 1)}-${String((fyStartOfMonth(m) + 2) % 100).padStart(2, '0')})</h4>
+      <p>Salary, G.P.F., P.Tax and I.Tax are taken automatically from the salary records. Enter your other investments / income below (all optional). These entries are not saved anywhere and disappear when you exit.</p>
+      <div class="itx-grid">${inputs}</div>
+    </div>
+    <div id="ps-itax-stmt"></div>
+    <div class="ps-hint no-print">✍️ <b>Instruction:</b> Print this sheet (A4 portrait), sign it yourself, then take the <b>Headmaster / HOI's signature and school seal</b> in the box marked “Checked &amp; Verified”. Submit only the signed copy.</div>`;
+  psRenderTaxStatement();
+  psApplyMode();
+}
+
+function psRenderTaxStatement() {
+  const ctx = psTaxCtx; if (!ctx) return;
+  const rec = psRecord(ctx.code, ctx.m); if (!rec) return;
+  const c0 = getCalculatedStaff(rec, loadMonthConfig(ctx.m), ctx.m);
+  const tot = { gross: 0, ptax: 0, gpf: 0, tds: 0, act: 0, proj: 0 };
+  ctx.rows.forEach(r => {
+    if (!r.c) return;
+    tot.gross += r.c.calculatedGross; tot.ptax += r.c.calculatedPTax; tot.gpf += Number(r.c.gpf) || 0;
+    if (r.proj) tot.proj++; else { tot.act++; tot.tds += r.c.calculatedITax; }
+  });
+  const T = psTaxCompute(tot, psTaxIn[ctx.code + '|' + ctx.fy] || {});
+  const bal = x => Math.round(x.total) - Math.round(tot.tds);
+  const balN = bal(T.N), balO = bal(T.O);
+  const rowsM = ctx.rows.map(r => r.c ? `<tr><td>${psEsc(r.k.replace('-', ' '))}${r.proj ? ' <i>(projected)</i>' : ''}</td><td class="amt">${psFmt(r.c.calculatedGross)}</td><td class="amt">${psFmt(Number(r.c.gpf) || 0)}</td><td class="amt">${psFmt(r.c.calculatedPTax)}</td><td class="amt">${r.proj ? '—' : psFmt(r.c.calculatedITax)}</td></tr>` : `<tr><td>${psEsc(r.k.replace('-', ' '))}</td><td colspan="4" style="text-align:center;color:#718096;">no record</td></tr>`).join('');
+  const line = (lbl, o, nw, cls) => `<tr class="${cls || ''}"><td>${lbl}</td><td class="amt">${o === null ? '' : psR(o)}</td><td class="amt">${nw === null ? '' : psR(nw)}</td></tr>`;
+  const dueLbl = b => (b >= 0 ? psR(b) + ' payable' : psR(-b) + ' refund');
+  const rem = tot.proj;
+  const perMonth = (b) => (rem > 0 && b > 0) ? psR(b / rem) + ' / month' : '—';
+  const html = `
+  <div class="itx-sheet">
+    <div class="ps-head">
+      <h2>Taldangra Fulmati High School [H.S.]</h2>
+      <p>P.O. Taldangra, Sub Div. Khatra, Dist. Bankura, West Bengal - 722152</p>
+    </div>
+    <div class="ps-title">COMPUTATION OF INCOME TAX ON SALARY — F.Y. ${ctx.fy}</div>
+    <table class="ps-id">
+      <tr><td><b>Name:</b> ${psEsc(c0.name)}</td><td><b>Designation:</b> ${psEsc(c0.desig)}</td></tr>
+      <tr><td><b>Employee Code:</b> ${psEsc(c0.emp_code || 'N.A.')}</td><td><b>PAN:</b> ${psEsc(c0.pan || 'N.A.')}</td></tr>
+    </table>
+    <table>
+      <thead><tr><th>Month</th><th style="text-align:right;">Gross (Rs.)</th><th style="text-align:right;">G.P.F.</th><th style="text-align:right;">P.Tax</th><th style="text-align:right;">I.Tax deducted</th></tr></thead>
+      <tbody>${rowsM}
+        <tr class="itx-tot"><td>Total (${tot.act} actual + ${tot.proj} projected)</td><td class="amt">${psFmt(tot.gross)}</td><td class="amt">${psFmt(tot.gpf)}</td><td class="amt">${psFmt(tot.ptax)}</td><td class="amt">${psFmt(tot.tds)}</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Particulars</th><th style="text-align:right;">Old Regime${T.newBetter ? '' : '<span class="itx-rec">Better</span>'}</th><th style="text-align:right;">New Regime${T.newBetter ? '<span class="itx-rec">Better</span>' : ''}</th></tr></thead>
+      <tbody>
+        ${line('1. Gross Salary (actual + projected)', T.sal, T.sal)}
+        ${line('2. Less: Standard Deduction u/s 16(ia)', T.O.std, T.N.std, 'itx-sub')}
+        ${line('3. Less: Professional Tax u/s 16(iii) (old regime only)', tot.ptax, 0, 'itx-sub')}
+        ${line('4. Income from Salary', T.O.head, T.N.head, 'itx-tot')}
+        ${line('5. Add: Other income', T.other, T.other)}
+        ${line('6. Less: H.B. loan interest u/s 24(b)', T.hbl, T.hbl)}
+        ${line('7. Gross Total Income', T.O.gti, T.N.gti, 'itx-tot')}
+        ${line('8. Less: u/s 80C (G.P.F. ' + psR(tot.gpf) + ' + others, max 1,50,000)', T.c80, 0, 'itx-sub')}
+        ${line('9. Less: Other Chapter VI-A (80CCD(1B), 80D, 80G etc.)', T.otherVIA, 0, 'itx-sub')}
+        ${line('10. Taxable Income', T.O.taxable, T.N.taxable, 'itx-tot')}
+        ${line('11. Tax as per slab', T.O.slab, T.N.slab)}
+        ${line('12. Less: Rebate / Marginal relief u/s 87A', T.O.rebate, T.N.rebate, 'itx-sub')}
+        ${line('13. Add: Health &amp; Education Cess @ 4%', T.O.cess, T.N.cess, 'itx-sub')}
+        ${line('14. TOTAL TAX PAYABLE', T.O.total, T.N.total, 'itx-fin')}
+        ${line('15. Less: I.Tax already deducted (' + tot.act + ' month(s))', tot.tds, tot.tds, 'itx-sub')}
+        <tr class="itx-fin"><td>16. Balance tax</td><td class="amt">${dueLbl(balO)}</td><td class="amt">${dueLbl(balN)}</td></tr>
+        <tr><td>17. Suggested I.Tax per month for the remaining ${rem} month(s)</td><td class="amt">${perMonth(balO)}</td><td class="amt">${perMonth(balN)}</td></tr>
+      </tbody>
+    </table>
+    <div class="itx-note">Projected months assume the latest saved month's pay continues (no bonus / arrear). Figures are an estimate for guidance; the final tax is as per the Form 16 / return. Income of other heads, capital gains and relief u/s 89(1) are not included here.</div>
+    <div class="itx-note">I, <b>${psEsc(c0.name)}</b>, declare that the above statement is true to the best of my information and belief.</div>
+    <div class="itx-sig">
+      <div>Signature of Employee<br><small>${psEsc(c0.name)}${c0.pan ? ' — ' + psEsc(c0.pan) : ''}</small></div>
+      <div><b>Checked &amp; Verified by the Headmaster / HOI</b><br><small>(With Seal &amp; Signature)</small></div>
+    </div>
+  </div>`;
+  document.getElementById('ps-itax-stmt').innerHTML = html;
+  psApplyMode();
+}
+
+function psRenderCert(c, m) {
+  const num = Object.assign({}, c, { basic: Number(c.basic) || 0, gpf: Number(c.gpf) || 0, addl: Number(c.addl) || 0 });
+  document.getElementById('ps-cert').innerHTML = `
+    <div class="ps-hint no-print">✍️ <b>Instruction:</b> Print this Salary Certificate (A4), then get it <b>signed by the Headmaster / HOI with the school seal</b> before using it for a bank, loan, visa or any office. An unsigned print is not valid.</div>
+    ${generatePayCertHTML(num, m.replace('-', ' '))}
+    <div class="cert-foot">Not valid without the signature and seal of the Headmaster / HOI.</div>`;
 }
 
 function renderAll() {
