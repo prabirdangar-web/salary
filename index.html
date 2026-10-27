@@ -2,7 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1a365d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TFHS Salary">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<script>
+  // Staff-app mode: installed app, or opened with ?staff=1 -> hide the admin login box
+  (function(){ try {
+    var sa = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || /[?&]staff=1/.test(location.search);
+    if (sa) document.documentElement.classList.add('staff-app');
+  } catch(e){} })();
+</script>
 <title>Taldangra Fulmati High School [H.S.] - Salary Portal</title>
 <style>
   :root {
@@ -300,6 +315,17 @@
     .itx-sheet { box-shadow:none !important; border:1px solid #000 !important; margin:0 auto !important; padding:10px 14px !important; }
     .itx-sheet.ps-pagebreak { page-break-before:always; break-before:page; }
     #ps-slip { margin-bottom:0; }
+  }
+  /* ===== Staff mobile app ===== */
+  .staff-app #authPanel { display:none !important; }
+  .staff-app body { padding-top: env(safe-area-inset-top, 0); padding-bottom: env(safe-area-inset-bottom, 0); }
+  .ps-install { display:none; width:100%; margin-top:10px; justify-content:center; padding:10px; }
+  .ps-install-hint { display:none; margin-top:10px; font-size:12px; color:#4a5568; background:#ebf8ff; border-radius:6px; padding:8px 10px; }
+  @media (max-width:640px) {
+    .ps-gate { margin:14px 10px; padding:20px 16px; }
+    .payslip, .itx-sheet { padding:16px 12px; overflow-x:auto; }
+    .controls-card { margin:10px !important; }
+    .itx-sheet table, .payslip table { font-size:11.5px; }
   }
 </style>
 </head>
@@ -644,6 +670,8 @@
         <input id="ps-v2" autocomplete="off" onkeydown="if(event.key==='Enter')psVerify();">
       </div>
       <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" onclick="psVerify()">View My Pay Slip</button>
+      <button type="button" id="ps-install" class="btn btn-outline ps-install" onclick="psInstallApp()">📲 Install this app on my phone</button>
+      <div id="ps-install-hint" class="ps-install-hint">📲 To install on iPhone: tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>.</div>
       <div id="ps-error"></div>
     </div>
 
@@ -2560,15 +2588,29 @@ function psApplyMode() {
   const pb = document.getElementById('ps-printbtn'); if (pb) pb.textContent = lbl[psMode];
 }
 
-// Month-wise rows for the F.Y. of month m: saved months are actual, later months are projected from the latest saved month.
+// Month index (year*12 + month0) of the retirement month: from Date of Retirement, else from DOB (age 60, retires on the last day of the month; if born on the 1st, the month before).
+function psRetireIdx(rec) {
+  const iso = /^\d{4}-\d{2}-\d{2}/;
+  if (rec && iso.test(String(rec.dor || ''))) { const [y, mo] = String(rec.dor).split('-').map(Number); return y * 12 + (mo - 1); }
+  if (rec && iso.test(String(rec.dob || ''))) {
+    const [y, mo, d] = String(rec.dob).split('-').map(Number);
+    let idx = (y + 60) * 12 + (mo - 1); if (d === 1) idx -= 1; return idx;
+  }
+  return null;
+}
+// Month-wise rows for the F.Y. of month m: saved months are actual; months not yet created are projected
+// from the latest saved month, but never beyond the retirement month, and never for a month that already
+// exists without this employee (retired / left).
 function psFYRows(code, m) {
   const keys = fyMonthsList(fyStartOfMonth(m));
   let last = -1;
   keys.forEach((k, i) => { if (psRecord(code, k)) last = i; });
+  const retIdx = last >= 0 ? psRetireIdx(psRecord(code, keys[last])) : null;
   return keys.map((k, i) => {
     const rec = psRecord(code, k);
     if (rec) return { k, proj: false, c: getCalculatedStaff(rec, loadMonthConfig(k), k) };
-    if (last >= 0 && i > last) {
+    const monthExists = !!(cloudCache.months && cloudCache.months[k]);
+    if (last >= 0 && i > last && !monthExists && (retIdx === null || monthKeyToIndex(k) <= retIdx)) {
       const base = psRecord(code, keys[last]);
       const clone = Object.assign({}, base, { bonus: 0, arrear: 0, addlPtax: 0, addlItax: 0, arrearNote: '' });
       return { k, proj: true, c: getCalculatedStaff(clone, loadMonthConfig(k), k) };
@@ -2675,6 +2717,9 @@ function psTaxSheetHTML(code, m, inp, extraCls) {
   const line = (lbl, o, nw, cls) => `<tr class="${cls || ''}"><td>${lbl}</td><td class="amt">${o === null ? '' : psR(o)}</td><td class="amt">${nw === null ? '' : psR(nw)}</td></tr>`;
   const dueLbl = b => (b >= 0 ? psR(b) + ' payable' : psR(-b) + ' refund');
   const rem = tot.proj;
+  const retIdx = psRetireIdx(rec), lastKey = fyMonthsList(fyStartOfMonth(m))[11];
+  const retNote = (retIdx !== null && retIdx < monthKeyToIndex(lastKey))
+    ? `<div class="itx-note"><b>Retired${c0.dor ? ' on ' + psEsc(formatDateDDMMYYYY(c0.dor)) : ''}:</b> salary is counted only up to the retirement month. Pension or other income received after retirement, if any, may be entered under “Other income”.</div>` : '';
   const perMonth = b => (rem > 0 && b > 0) ? psR(b / rem) + ' / month' : '—';
   return `
   <div class="itx-sheet ${extraCls || ''}">
@@ -2718,6 +2763,7 @@ function psTaxSheetHTML(code, m, inp, extraCls) {
         <tr><td>20. Suggested I.Tax per month for the remaining ${rem} month(s)</td><td class="amt">${perMonth(balO)}</td><td class="amt">${perMonth(balN)}</td></tr>
       </tbody>
     </table>
+    ${retNote}
     <div class="itx-note">Projected months assume the latest saved month's pay continues (no bonus / arrear). Figures are an estimate for guidance; the final tax is as per the Form 16 / return. Income of other heads is not included.</div>
     <div class="itx-note">I, <b>${psEsc(c0.name)}</b>, declare that the above statement is true to the best of my information and belief.</div>
     <div class="itx-sig">
@@ -2825,5 +2871,26 @@ psFactorChanged(); psShowGate();
 // syncs (including the very first load) — see the cloud-sync block above.
 </script>
 
+<script>
+/* ===== Mobile app (PWA): service worker + install button ===== */
+let psInstallEvt = null;
+function psInstallApp() {
+  if (!psInstallEvt) return;
+  psInstallEvt.prompt();
+  psInstallEvt.userChoice.finally(() => { psInstallEvt = null; document.getElementById('ps-install').style.display = 'none'; });
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); psInstallEvt = e;
+  document.getElementById('ps-install').style.display = 'inline-flex';
+});
+window.addEventListener('appinstalled', () => { document.getElementById('ps-install').style.display = 'none'; });
+(function () {
+  const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) document.getElementById('ps-install-hint').style.display = 'block';
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+})();
+</script>
 </body>
 </html>
