@@ -370,6 +370,7 @@
     <button class="nav-tab" onclick="switchTab('audit')">🔎 Monthwise Audit</button>
     <button class="nav-tab" onclick="switchTab('fy')">📅 FY Report</button>
     <button class="nav-tab" onclick="switchTab('payslip')">🧾 My Pay Slip</button>
+    <button class="nav-tab admin-only" onclick="switchTab('itaxadmin')">💰 I.Tax (Admin)</button>
   </div>
 </div>
 
@@ -671,6 +672,28 @@
       <div id="ps-cert"></div>
       <div id="ps-fy" class="table-responsive no-print"></div>
     </div>
+  </div>
+
+  <!-- ================= ADMIN: INCOME TAX SHEET (dropdown mode) ================= -->
+  <div id="tab-itaxadmin" class="tab-content">
+    <div class="controls-card no-print" style="margin:0 0 16px 0;">
+      <div class="control-group">
+        <label>Employee</label>
+        <select id="itxa-emp" onchange="itxaEmpChange()" style="min-width:290px;"></select>
+      </div>
+      <div class="control-group">
+        <label>Financial Year</label>
+        <select id="itxa-fy" onchange="itxaRender()" style="min-width:120px;"></select>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="itxaSave()">💾 Save Declaration</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Print Sheet</button>
+        <button class="btn btn-outline" onclick="itxaPrintAll()">🖨️ Print All Staff</button>
+      </div>
+    </div>
+    <div id="itxa-msg" class="ps-hint no-print" style="display:none;"></div>
+    <div id="itxa-inputs" class="no-print"></div>
+    <div id="itxa-sheet"></div>
   </div>
 
   <!-- ================= TAB 4: STAFF DIRECTORY & ENTRY ================= -->
@@ -976,7 +999,7 @@ const DEFAULT_MARCH_STAFF = [
 ];
 
 // Cloud sync (Firebase) — bundles every per-month key into ONE Firestore document
-let cloudCache = { months: {}, configs: {} };
+let cloudCache = { months: {}, configs: {}, taxDecl: {} };
 let isAdmin = false;
 
 /* Corrected PANs (by Employee Code). Applied to ALL saved months on every load, so old saved
@@ -1114,8 +1137,9 @@ salaryDocRef.onSnapshot((docSnap)=>{
     const data = docSnap.data();
     cloudCache.months = data.months || {};
     cloudCache.configs = data.configs || {};
+    cloudCache.taxDecl = data.taxDecl || {};
   } else {
-    cloudCache = { months: {}, configs: {} };
+    cloudCache = { months: {}, configs: {}, taxDecl: {} };
   }
   applyPanCorrections(true);
   try{ localStorage.setItem(SALARY_CLOUD_CACHE_KEY, JSON.stringify(cloudCache)); }catch(e){}
@@ -1126,15 +1150,16 @@ salaryDocRef.onSnapshot((docSnap)=>{
   setSyncStatus('⚠ Offline (local only)', '#b45309');
   try{
     const raw = localStorage.getItem(SALARY_CLOUD_CACHE_KEY);
-    cloudCache = raw ? JSON.parse(raw) : { months: {}, configs: {} };
-  }catch(e){ cloudCache = { months: {}, configs: {} }; }
+    cloudCache = raw ? JSON.parse(raw) : { months: {}, configs: {}, taxDecl: {} };
+    cloudCache.taxDecl = cloudCache.taxDecl || {};
+  }catch(e){ cloudCache = { months: {}, configs: {}, taxDecl: {} }; }
   applyPanCorrections(false);
   refreshAfterCloudUpdate();
 });
 
 function pushCloudCache(){
   setSyncStatus('☁ Saving…', '#1e3a8a');
-  salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, updatedAt: new Date().toISOString()})
+  salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, taxDecl: cloudCache.taxDecl || {}, updatedAt: new Date().toISOString()})
     .then(()=> setSyncStatus('☁ Synced', '#065f46'))
     .catch((err)=>{
       console.error('Firestore save failed:', err);
@@ -1456,7 +1481,8 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('tab-' + tabId).classList.add('active');
-  document.getElementById('top-controls').style.display = (tabId === 'payslip') ? 'none' : '';
+  document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin') ? 'none' : '';
+  if (tabId === 'itaxadmin') itxaInit();
   if (tabId === 'payslip') initPaySlipTab();
   
   if (tabId === 'paycert') renderPayCertOptions();
@@ -2505,16 +2531,18 @@ function psSlipHTML(c, month) {
   </div>`;
 }
 
-/* ===== I.Tax sheet + Salary Certificate for the staff self-view ===== */
+/* ===== I.Tax sheet + Salary Certificate (staff self-view) and I.Tax admin panel ===== */
 let psMode = 'slip';
-let psTaxIn = {};      // declarations typed by the staff member (kept in memory only; cleared on exit)
-let psTaxCtx = null;   // { code, m, fy, rows }
+let psTaxIn = {};      // values typed by the staff member (memory only; cleared on exit) - override the admin-saved declaration
+let psTaxCtx = null;   // { code, m, fy }
 const PS_TAX_FIELDS = [
   ['other','Other income (bank / FD interest)'], ['hbli','H.B. loan interest u/s 24(b) (max 2,00,000)'],
   ['gis','GIS'], ['lic','LIC / Insurance premium'], ['hblp','H.B. loan principal'],
   ['nsc','NSC / NSC interest'], ['ppf','PPF / PLI'], ['tuition','Tuition fees (2 children)'],
   ['ssy','Sukanya Samriddhi'], ['nps1','80CCD(1) NPS'], ['nps1b','80CCD(1B) NPS (max 50,000)'],
-  ['d80d','80D Mediclaim (max 25,000)'], ['d80g','80G Donation'], ['dother','Other Chapter VI-A deduction']
+  ['d80d','80D Mediclaim (max 25,000)'], ['d80g','80G Donation'], ['dother','Other Chapter VI-A deduction'],
+  ['stcg','Short-term capital gain u/s 111A (20%)'], ['ltcg','Long-term capital gain u/s 112A (12.5%, 1.25L exempt)'],
+  ['stcl','Short-term capital loss to set off'], ['r89','Relief u/s 89(1)']
 ];
 function psR(n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); }
 
@@ -2549,7 +2577,7 @@ function psFYRows(code, m) {
   });
 }
 
-// Same slabs / rebate / deduction rules as the Income Tax Calculator (itax.html), FY 2026-27.
+// Same slabs / rebate / deduction / capital-gain rules as the Income Tax Calculator (itax.html), FY 2026-27.
 function psSlabNew(x) {
   let t = 0;
   [[400000, 800000, .05], [800000, 1200000, .10], [1200000, 1600000, .15], [1600000, 2000000, .20], [2000000, 2400000, .25], [2400000, Infinity, .30]]
@@ -2564,12 +2592,20 @@ function psSlabOld(x) {
 }
 function psTaxCompute(tot, inp) {
   const n = k => parseFloat(inp[k]) || 0;
-  const sal = tot.gross, other = n('other'), hbl = Math.min(n('hbli'), 200000);
+  const sal = tot.gross, other = n('other'), hbl = Math.min(n('hbli'), 200000), relief = n('r89');
+  // Capital gains (special rates; short-term loss is set off against STCG first, then LTCG)
+  const rawS = n('stcg'), rawL = n('ltcg'); let loss = n('stcl'), netS = rawS, netL = rawL;
+  if (loss > 0) { if (rawS >= loss) { netS = rawS - loss; loss = 0; } else { netS = 0; loss -= rawS; } }
+  if (loss > 0) { if (rawL >= loss) { netL = rawL - loss; loss = 0; } else { netL = 0; loss -= rawL; } }
+  const cgS = netS * 0.20, cgL = Math.max(0, netL - 125000) * 0.125, cg = cgS + cgL;
+  const fin = (slab, fn) => {
+    const cess = (fn + cg) * 0.04, pre = fn + cg + cess;
+    return { slab, rebate: slab - fn, cg, cess, pre, relief, total: Math.max(0, pre - relief) };
+  };
   // New regime
   const stdN = sal > 0 ? 75000 : 0, headN = Math.max(0, sal - stdN), gtiN = Math.max(0, headN + other - hbl);
   const slabN = psSlabNew(gtiN); let finN = slabN;
   if (gtiN <= 1200000) finN = 0; else if (gtiN < 1275000) { const ex = gtiN - 1200000; if (slabN > ex) finN = ex; }
-  const cessN = finN * 0.04, totN = finN + cessN;
   // Old regime
   const stdO = sal > 0 ? 50000 : 0, headO = Math.max(0, sal - tot.ptax - stdO), gtiO = Math.max(0, headO + other - hbl);
   const sum80C = tot.gpf + n('gis') + n('lic') + n('hblp') + n('nsc') + n('ppf') + n('tuition') + n('ssy') + n('nps1');
@@ -2577,15 +2613,20 @@ function psTaxCompute(tot, inp) {
   const otherVIA = Math.min(n('nps1b'), 50000) + Math.min(n('d80d'), 25000) + n('d80g') + n('dother');
   const via = c80 + otherVIA, netO = Math.max(0, gtiO - via);
   const slabO = psSlabOld(netO), finO = netO <= 500000 ? 0 : slabO;
-  const cessO = finO * 0.04, totO = finO + cessO;
-  return {
-    sal, other, hbl, sum80C, c80, otherVIA, via,
-    N: { std: stdN, head: headN, gti: gtiN, taxable: gtiN, slab: slabN, rebate: slabN - finN, cess: cessN, total: totN },
-    O: { std: stdO, head: headO, gti: gtiO, taxable: netO, slab: slabO, rebate: slabO - finO, cess: cessO, total: totO },
-    newBetter: totN <= totO
-  };
+  const N = Object.assign({ std: stdN, head: headN, gti: gtiN, taxable: gtiN }, fin(slabN, finN));
+  const O = Object.assign({ std: stdO, head: headO, gti: gtiO, taxable: netO }, fin(slabO, finO));
+  return { sal, other, hbl, sum80C, c80, otherVIA, via, cg, cgS, cgL, N, O, newBetter: N.total <= O.total };
 }
 
+function psTaxFieldsHTML(cur, fn) {
+  return PS_TAX_FIELDS.map(([k, l]) =>
+    `<div><label>${l}</label><input type="number" min="0" step="1" value="${psEsc(cur[k] || '')}" oninput="${fn}('${k}', this.value)"></div>`).join('');
+}
+// Staff view: admin-saved declaration is the default, anything typed by the staff member overrides it (memory only).
+function psEffTaxIn(code, fy) {
+  const id = code + '|' + fy;
+  return Object.assign({}, (cloudCache.taxDecl || {})[id] || {}, psTaxIn[id] || {});
+}
 function psTaxInput(key, val) {
   if (!psTaxCtx) return;
   const id = psTaxCtx.code + '|' + psTaxCtx.fy;
@@ -2596,47 +2637,52 @@ function psTaxInput(key, val) {
 
 function psRenderTax(code, m) {
   const fy = fyLabel(fyStartOfMonth(m));
-  psTaxCtx = { code, m, fy, rows: psFYRows(code, m) };
-  const id = code + '|' + fy, cur = psTaxIn[id] || {};
-  const inputs = PS_TAX_FIELDS.map(([k, l]) =>
-    `<div><label>${l}</label><input type="number" min="0" step="1" value="${psEsc(cur[k] || '')}" oninput="psTaxInput('${k}', this.value)"></div>`).join('');
+  psTaxCtx = { code, m, fy };
   document.getElementById('ps-itax').innerHTML = `
     <div class="itx-in no-print">
       <h4>💰 Income Tax Sheet — F.Y. ${fy} (A.Y. ${(fyStartOfMonth(m) + 1)}-${String((fyStartOfMonth(m) + 2) % 100).padStart(2, '0')})</h4>
-      <p>Salary, G.P.F., P.Tax and I.Tax are taken automatically from the salary records. Enter your other investments / income below (all optional). These entries are not saved anywhere and disappear when you exit.</p>
-      <div class="itx-grid">${inputs}</div>
+      <p>Salary, G.P.F., P.Tax and I.Tax are taken automatically from the salary records. Amounts already entered by the school office appear below; you may change or add your own (all optional). Changes made here are not saved and disappear when you exit.</p>
+      <div class="itx-grid">${psTaxFieldsHTML(psEffTaxIn(code, fy), 'psTaxInput')}</div>
     </div>
     <div id="ps-itax-stmt"></div>
     <div class="ps-hint no-print">✍️ <b>Instruction:</b> Print this sheet (A4 portrait), sign it yourself, then take the <b>Headmaster / HOI's signature and school seal</b> in the box marked “Checked &amp; Verified”. Submit only the signed copy.</div>`;
   psRenderTaxStatement();
   psApplyMode();
 }
-
 function psRenderTaxStatement() {
   const ctx = psTaxCtx; if (!ctx) return;
-  const rec = psRecord(ctx.code, ctx.m); if (!rec) return;
-  const c0 = getCalculatedStaff(rec, loadMonthConfig(ctx.m), ctx.m);
+  const html = psTaxSheetHTML(ctx.code, ctx.m, psEffTaxIn(ctx.code, ctx.fy), '');
+  const el = document.getElementById('ps-itax-stmt'); if (el) el.innerHTML = html;
+  psApplyMode();
+}
+
+// Builds the printable tax sheet for one employee / financial year (used by the staff view and the admin panel).
+function psTaxSheetHTML(code, m, inp, extraCls) {
+  const fy = fyLabel(fyStartOfMonth(m));
+  const rows = psFYRows(code, m);
+  const rec = psRecord(code, m); if (!rec) return '';
+  const c0 = getCalculatedStaff(rec, loadMonthConfig(m), m);
   const tot = { gross: 0, ptax: 0, gpf: 0, tds: 0, act: 0, proj: 0 };
-  ctx.rows.forEach(r => {
+  rows.forEach(r => {
     if (!r.c) return;
     tot.gross += r.c.calculatedGross; tot.ptax += r.c.calculatedPTax; tot.gpf += Number(r.c.gpf) || 0;
     if (r.proj) tot.proj++; else { tot.act++; tot.tds += r.c.calculatedITax; }
   });
-  const T = psTaxCompute(tot, psTaxIn[ctx.code + '|' + ctx.fy] || {});
+  const T = psTaxCompute(tot, inp || {});
   const bal = x => Math.round(x.total) - Math.round(tot.tds);
   const balN = bal(T.N), balO = bal(T.O);
-  const rowsM = ctx.rows.map(r => r.c ? `<tr><td>${psEsc(r.k.replace('-', ' '))}${r.proj ? ' <i>(projected)</i>' : ''}</td><td class="amt">${psFmt(r.c.calculatedGross)}</td><td class="amt">${psFmt(Number(r.c.gpf) || 0)}</td><td class="amt">${psFmt(r.c.calculatedPTax)}</td><td class="amt">${r.proj ? '—' : psFmt(r.c.calculatedITax)}</td></tr>` : `<tr><td>${psEsc(r.k.replace('-', ' '))}</td><td colspan="4" style="text-align:center;color:#718096;">no record</td></tr>`).join('');
+  const rowsM = rows.map(r => r.c ? `<tr><td>${psEsc(r.k.replace('-', ' '))}${r.proj ? ' <i>(projected)</i>' : ''}</td><td class="amt">${psFmt(r.c.calculatedGross)}</td><td class="amt">${psFmt(Number(r.c.gpf) || 0)}</td><td class="amt">${psFmt(r.c.calculatedPTax)}</td><td class="amt">${r.proj ? '—' : psFmt(r.c.calculatedITax)}</td></tr>` : `<tr><td>${psEsc(r.k.replace('-', ' '))}</td><td colspan="4" style="text-align:center;color:#718096;">no record</td></tr>`).join('');
   const line = (lbl, o, nw, cls) => `<tr class="${cls || ''}"><td>${lbl}</td><td class="amt">${o === null ? '' : psR(o)}</td><td class="amt">${nw === null ? '' : psR(nw)}</td></tr>`;
   const dueLbl = b => (b >= 0 ? psR(b) + ' payable' : psR(-b) + ' refund');
   const rem = tot.proj;
-  const perMonth = (b) => (rem > 0 && b > 0) ? psR(b / rem) + ' / month' : '—';
-  const html = `
-  <div class="itx-sheet">
+  const perMonth = b => (rem > 0 && b > 0) ? psR(b / rem) + ' / month' : '—';
+  return `
+  <div class="itx-sheet ${extraCls || ''}">
     <div class="ps-head">
       <h2>Taldangra Fulmati High School [H.S.]</h2>
       <p>P.O. Taldangra, Sub Div. Khatra, Dist. Bankura, West Bengal - 722152</p>
     </div>
-    <div class="ps-title">COMPUTATION OF INCOME TAX ON SALARY — F.Y. ${ctx.fy}</div>
+    <div class="ps-title">COMPUTATION OF INCOME TAX — F.Y. ${fy}</div>
     <table class="ps-id">
       <tr><td><b>Name:</b> ${psEsc(c0.name)}</td><td><b>Designation:</b> ${psEsc(c0.desig)}</td></tr>
       <tr><td><b>Employee Code:</b> ${psEsc(c0.emp_code || 'N.A.')}</td><td><b>PAN:</b> ${psEsc(c0.pan || 'N.A.')}</td></tr>
@@ -2659,26 +2705,101 @@ function psRenderTaxStatement() {
         ${line('7. Gross Total Income', T.O.gti, T.N.gti, 'itx-tot')}
         ${line('8. Less: u/s 80C (G.P.F. ' + psR(tot.gpf) + ' + others, max 1,50,000)', T.c80, 0, 'itx-sub')}
         ${line('9. Less: Other Chapter VI-A (80CCD(1B), 80D, 80G etc.)', T.otherVIA, 0, 'itx-sub')}
-        ${line('10. Taxable Income', T.O.taxable, T.N.taxable, 'itx-tot')}
+        ${line('10. Taxable Income (slab rates)', T.O.taxable, T.N.taxable, 'itx-tot')}
         ${line('11. Tax as per slab', T.O.slab, T.N.slab)}
         ${line('12. Less: Rebate / Marginal relief u/s 87A', T.O.rebate, T.N.rebate, 'itx-sub')}
-        ${line('13. Add: Health &amp; Education Cess @ 4%', T.O.cess, T.N.cess, 'itx-sub')}
-        ${line('14. TOTAL TAX PAYABLE', T.O.total, T.N.total, 'itx-fin')}
-        ${line('15. Less: I.Tax already deducted (' + tot.act + ' month(s))', tot.tds, tot.tds, 'itx-sub')}
-        <tr class="itx-fin"><td>16. Balance tax</td><td class="amt">${dueLbl(balO)}</td><td class="amt">${dueLbl(balN)}</td></tr>
-        <tr><td>17. Suggested I.Tax per month for the remaining ${rem} month(s)</td><td class="amt">${perMonth(balO)}</td><td class="amt">${perMonth(balN)}</td></tr>
+        ${line('13. Add: Tax on capital gains (STCG ' + psR(T.cgS) + ' + LTCG ' + psR(T.cgL) + ')', T.cg, T.cg, 'itx-sub')}
+        ${line('14. Add: Health &amp; Education Cess @ 4%', T.O.cess, T.N.cess, 'itx-sub')}
+        ${line('15. Total tax before relief', T.O.pre, T.N.pre, 'itx-tot')}
+        ${line('16. Less: Relief u/s 89(1)', T.O.relief, T.N.relief, 'itx-sub')}
+        ${line('17. TOTAL TAX PAYABLE', T.O.total, T.N.total, 'itx-fin')}
+        ${line('18. Less: I.Tax already deducted (' + tot.act + ' month(s))', tot.tds, tot.tds, 'itx-sub')}
+        <tr class="itx-fin"><td>19. Balance tax</td><td class="amt">${dueLbl(balO)}</td><td class="amt">${dueLbl(balN)}</td></tr>
+        <tr><td>20. Suggested I.Tax per month for the remaining ${rem} month(s)</td><td class="amt">${perMonth(balO)}</td><td class="amt">${perMonth(balN)}</td></tr>
       </tbody>
     </table>
-    <div class="itx-note">Projected months assume the latest saved month's pay continues (no bonus / arrear). Figures are an estimate for guidance; the final tax is as per the Form 16 / return. Income of other heads, capital gains and relief u/s 89(1) are not included here.</div>
+    <div class="itx-note">Projected months assume the latest saved month's pay continues (no bonus / arrear). Figures are an estimate for guidance; the final tax is as per the Form 16 / return. Income of other heads is not included.</div>
     <div class="itx-note">I, <b>${psEsc(c0.name)}</b>, declare that the above statement is true to the best of my information and belief.</div>
     <div class="itx-sig">
       <div>Signature of Employee<br><small>${psEsc(c0.name)}${c0.pan ? ' — ' + psEsc(c0.pan) : ''}</small></div>
       <div><b>Checked &amp; Verified by the Headmaster / HOI</b><br><small>(With Seal &amp; Signature)</small></div>
     </div>
   </div>`;
-  document.getElementById('ps-itax-stmt').innerHTML = html;
-  psApplyMode();
 }
+
+/* ---------- Admin panel: pick an employee from the dropdown, enter / save the declaration, print ---------- */
+let itxaCur = null;       // { code, fy, m, inp }
+let itxaBatchOn = false;
+function itxaMsg(t) { const el = document.getElementById('itxa-msg'); el.style.display = t ? '' : 'none'; el.innerHTML = t || ''; }
+function itxaInit() {
+  const sel = document.getElementById('itxa-emp'), old = sel.value;
+  const list = Array.from(psLatestStaffMap().values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  sel.innerHTML = '<option value="">-- Select employee --</option>' + list.map(e => {
+    const code = String(e.emp_code).trim().toUpperCase();
+    return `<option value="${psEsc(code)}">${psEsc(e.name)} — ${psEsc(e.desig || '')} (${psEsc(code)})</option>`;
+  }).join('');
+  if (old) sel.value = old;
+  itxaEmpChange();
+}
+function itxaStartsFor(code) {
+  return Array.from(new Set(psMonthsFor(code).map(fyStartOfMonth))).sort((a, b) => b - a);
+}
+function itxaEmpChange() {
+  const code = document.getElementById('itxa-emp').value, fySel = document.getElementById('itxa-fy'), old = fySel.value;
+  const starts = code ? itxaStartsFor(code) : [];
+  fySel.innerHTML = starts.map(y => `<option value="${y}">${fyLabel(y)}</option>`).join('');
+  if (old && starts.map(String).includes(old)) fySel.value = old;
+  itxaRender();
+}
+function itxaRender() {
+  const code = document.getElementById('itxa-emp').value, start = parseInt(document.getElementById('itxa-fy').value, 10);
+  const inpEl = document.getElementById('itxa-inputs'), shEl = document.getElementById('itxa-sheet');
+  itxaCur = null; itxaMsg('');
+  if (!code || isNaN(start)) { inpEl.innerHTML = ''; shEl.innerHTML = ''; itxaMsg('Select an employee from the dropdown to prepare the Income Tax sheet.'); return; }
+  const keys = fyMonthsList(start).filter(k => psRecord(code, k));
+  if (!keys.length) { inpEl.innerHTML = ''; shEl.innerHTML = ''; itxaMsg('No salary record saved for this employee in F.Y. ' + fyLabel(start) + '.'); return; }
+  const m = keys[keys.length - 1], fy = fyLabel(start);
+  itxaCur = { code, fy, m, inp: Object.assign({}, (cloudCache.taxDecl || {})[code + '|' + fy] || {}) };
+  inpEl.innerHTML = `<div class="itx-in" style="max-width:none;">
+      <h4>Declaration / investments — F.Y. ${fy}</h4>
+      <p>Press <b>Save Declaration</b> to store these amounts online. They then appear automatically (and in the tax calculation) when this employee opens “My Pay Slip → I.Tax Sheet”.</p>
+      <div class="itx-grid">${psTaxFieldsHTML(itxaCur.inp, 'itxaInput')}</div></div>`;
+  shEl.innerHTML = psTaxSheetHTML(code, m, itxaCur.inp, '');
+}
+function itxaInput(k, v) {
+  if (!itxaCur) return;
+  itxaCur.inp[k] = v;
+  document.getElementById('itxa-sheet').innerHTML = psTaxSheetHTML(itxaCur.code, itxaCur.m, itxaCur.inp, '');
+}
+function itxaSave() {
+  if (!isAdmin) { alert('Please log in as admin to save.'); return; }
+  if (!itxaCur) { alert('Select an employee first.'); return; }
+  const clean = {};
+  PS_TAX_FIELDS.forEach(([k]) => { const v = parseFloat(itxaCur.inp[k]); if (v) clean[k] = v; });
+  cloudCache.taxDecl = cloudCache.taxDecl || {};
+  const id = itxaCur.code + '|' + itxaCur.fy;
+  if (Object.keys(clean).length) cloudCache.taxDecl[id] = clean; else delete cloudCache.taxDecl[id];
+  try { localStorage.setItem(SALARY_CLOUD_CACHE_KEY, JSON.stringify(cloudCache)); } catch (e) {}
+  pushCloudCache();
+  itxaMsg('✅ Declaration saved for F.Y. ' + itxaCur.fy + '.');
+}
+// One sheet per employee (saved declarations applied), each on its own page.
+function itxaPrintAll() {
+  const start = parseInt(document.getElementById('itxa-fy').value, 10);
+  if (isNaN(start)) { alert('Select an employee and financial year first (the year chosen here is used for everyone).'); return; }
+  const fy = fyLabel(start); let html = '', cnt = 0;
+  Array.from(psLatestStaffMap().values()).sort((a, b) => String(a.name).localeCompare(String(b.name))).forEach(e => {
+    const code = String(e.emp_code).trim().toUpperCase();
+    const keys = fyMonthsList(start).filter(k => psRecord(code, k));
+    if (!keys.length) return;
+    html += psTaxSheetHTML(code, keys[keys.length - 1], (cloudCache.taxDecl || {})[code + '|' + fy] || {}, cnt++ ? 'ps-pagebreak' : '');
+  });
+  if (!cnt) { alert('No salary records found for F.Y. ' + fy + '.'); return; }
+  itxaBatchOn = true;
+  document.getElementById('itxa-sheet').innerHTML = html;
+  setTimeout(() => window.print(), 100);
+}
+window.addEventListener('afterprint', () => { if (itxaBatchOn) { itxaBatchOn = false; itxaRender(); } });
 
 function psRenderCert(c, m) {
   const num = Object.assign({}, c, { basic: Number(c.basic) || 0, gpf: Number(c.gpf) || 0, addl: Number(c.addl) || 0 });
