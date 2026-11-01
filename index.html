@@ -345,10 +345,15 @@
     messagingSenderId: "316041012204",
     appId: "1:316041012204:web:c0b52bc796c5ac173716c9"
   };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const auth = firebase.auth();
-  const salaryDocRef = db.collection('tfhs').doc('salaryPortal');
+  /* Firebase SDK is needed only for admin. If this browser cannot run it (very old browser, blocked CDN),
+     the staff My Pay Slip lookup still works through plain REST calls. */
+  var db = null, auth = null, salaryDocRef = null;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    salaryDocRef = db.collection('tfhs').doc('salaryPortal');
+  } catch (e) { console.warn('Firebase SDK unavailable - staff lookup only', e); }
 </script>
 
 <!-- ADMIN LOGIN PANEL (view-only for everyone unless logged in) -->
@@ -677,7 +682,7 @@
       <button type="button" id="ps-install" class="btn btn-outline ps-install" onclick="psInstallApp()">📲 Install this app on my phone</button>
       <div id="ps-install-hint" class="ps-install-hint">📲 To install on iPhone: tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>.</div>
       <div id="ps-error"></div>
-      <div style="font-size:10px;color:#94a3b8;margin-top:8px;">Build 2026-11-01c · direct lookup</div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:8px;">Build 2026-11-01d · direct lookup</div>
     </div>
 
     <div id="ps-view" style="display:none;">
@@ -1145,7 +1150,7 @@ function applyGuard(){
   b.classList.toggle('guard-locked', !isAdmin && !psVerifiedCode);
   b.classList.toggle('staff-only', !isAdmin && !!psVerifiedCode);
 }
-auth.onAuthStateChanged((user)=>{
+function onSalaryAuth(user){
   isAdmin = !!user;
   document.body.classList.toggle('is-admin', isAdmin);
   applyGuard();
@@ -1158,17 +1163,20 @@ auth.onAuthStateChanged((user)=>{
     cloudCache = { months: {}, configs: {}, taxDecl: {} };   // staff / signed-out: no full salary data in memory
     setSyncStatus('My Pay Slip (staff view)', '#0f172a');
   }
-});
+}
+if (auth) auth.onAuthStateChanged(onSalaryAuth);
+else { try { onSalaryAuth(null); } catch (e) { console.warn(e); } }
 function adminLogin(){
   const email = document.getElementById('authEmail').value.trim();
   const pass = document.getElementById('authPass').value;
   const errEl = document.getElementById('authError');
   errEl.textContent = '';
+  if (!auth) { errEl.textContent = 'Admin login needs a newer browser (use Chrome or Edge).'; return; }
   auth.signInWithEmailAndPassword(email, pass).catch((err)=>{
     errEl.textContent = 'Login failed: incorrect email or password.';
   });
 }
-function adminLogout(){ auth.signOut(); }
+function adminLogout(){ if (auth) auth.signOut(); }
 
 /* ---- Real-time cloud sync of all months/configs ---- */
 function salarySnapHandler(docSnap){
@@ -1200,7 +1208,7 @@ function salarySnapError(err){
   refreshAfterCloudUpdate();
 }
 let salaryUnsub = null, staffPartial = false;
-function startSalarySync(){ if (!salaryUnsub) salaryUnsub = salaryDocRef.onSnapshot(salarySnapHandler, salarySnapError); }
+function startSalarySync(){ if (salaryDocRef && !salaryUnsub) salaryUnsub = salaryDocRef.onSnapshot(salarySnapHandler, salarySnapError); }
 function stopSalarySync(){ if (salaryUnsub) { salaryUnsub(); salaryUnsub = null; } }
 
 function pushCloudCache(){
@@ -1516,11 +1524,10 @@ function getCalculatedStaff(emp, cfgOv, monthOv) {
   const totalDed = gpf + ptax + itax;
   const net = gross - totalDed;
   
-  return {
-    ...emp,
+  return Object.assign({}, emp, {
     calculatedDA: da, calculatedHRA: hra, calculatedMA: ma, calculatedBonus: bonus, calculatedArrear: arrear,
     calculatedGross: gross, calculatedPTax: ptax, calculatedITax: itax, calculatedAddlPTax: addlPtax, calculatedAddlITax: addlItax, calculatedTotalDed: totalDed, calculatedNet: net
-  };
+  });
 }
 
 function switchTab(tabId) {
@@ -2014,7 +2021,7 @@ function saveStaff(e) {
     dor: document.getElementById('inpDor').value,
     qualification: document.getElementById('inpQual').value.trim(),
   };
-  if (editIdx >= 0) staffData[editIdx] = { ...staffData[editIdx], ...emp };
+  if (editIdx >= 0) staffData[editIdx] = Object.assign({}, staffData[editIdx], emp);
   else staffData.push(emp);
   saveMonthData(); closeStaffModal(); renderAll();
 }
