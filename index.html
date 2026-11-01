@@ -677,6 +677,7 @@
       <button type="button" id="ps-install" class="btn btn-outline ps-install" onclick="psInstallApp()">📲 Install this app on my phone</button>
       <div id="ps-install-hint" class="ps-install-hint">📲 To install on iPhone: tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>.</div>
       <div id="ps-error"></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:8px;">Build 2026-11-01c · direct lookup</div>
     </div>
 
     <div id="ps-view" style="display:none;">
@@ -2636,10 +2637,10 @@ async function psVerify() {
       const id = await slipPairId(f1, v1, f2, v2);
       const res = await fetch(SLIP_FS + id + '?key=' + firebaseConfig.apiKey, { cache: 'no-store' });
       if (res.status === 404) doc = null;
-      else if (!res.ok) { err.textContent = 'Cannot load salary data right now (server said ' + res.status + '). Please try again later.'; return; }
+      else if (!res.ok) { let why = ''; try { const j = await res.json(); why = ' - ' + ((j.error && j.error.message) || ''); } catch (x) {} err.textContent = 'Cannot load salary data right now (server said ' + res.status + why + '). Please try again later.'; return; }
       else { const j = await res.json(); doc = {}; Object.keys(j.fields || {}).forEach(k => doc[k] = slipDec(j.fields[k])); }
     } catch (e) {
-      err.textContent = 'Cannot reach the server. Please check your internet and try again.';
+      err.textContent = 'Cannot reach the server (' + (e && e.message ? e.message : e) + '). Please check your internet and try again.';
       return;
     }
     if (doc && doc.code && doc.months) {
