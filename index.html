@@ -363,6 +363,8 @@
   <div id="authLoggedIn" style="display:none;">
     <div style="font-weight:700;margin-bottom:6px;color:#065f46;">✅ Admin Mode (editing enabled)</div>
     <button class="btn btn-outline" style="width:100%;padding:7px;font-size:11px;" onclick="adminLogout()">Logout</button>
+    <button class="btn btn-outline" style="width:100%;padding:7px;font-size:11px;margin-top:5px;" onclick="publishSlipLookup(true)" title="Re-publish every employee's pay slip data for the staff My Pay Slip page">📤 Publish Staff Pay Slips</button>
+    <div id="slipPubMsg" style="font-size:10.5px;color:#065f46;margin-top:4px;"></div>
   </div>
 </div>
 <style>
@@ -1149,6 +1151,12 @@ auth.onAuthStateChanged((user)=>{
   if (isAdmin) { if (applyPanCorrections(true)) { staffData = loadMonthData(parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || '2026-07')); renderAll(); } }
   document.getElementById('authLoggedOut').style.display = isAdmin ? 'none' : '';
   document.getElementById('authLoggedIn').style.display = isAdmin ? '' : 'none';
+  if (isAdmin) startSalarySync();
+  else {
+    stopSalarySync();
+    cloudCache = { months: {}, configs: {}, taxDecl: {} };   // staff / signed-out: no full salary data in memory
+    setSyncStatus('My Pay Slip (staff view)', '#0f172a');
+  }
 });
 function adminLogin(){
   const email = document.getElementById('authEmail').value.trim();
@@ -1162,7 +1170,7 @@ function adminLogin(){
 function adminLogout(){ auth.signOut(); }
 
 /* ---- Real-time cloud sync of all months/configs ---- */
-salaryDocRef.onSnapshot((docSnap)=>{
+function salarySnapHandler(docSnap){
   if(docSnap.exists && docSnap.data()){
     const data = docSnap.data();
     cloudCache.months = data.months || {};
@@ -1174,8 +1182,12 @@ salaryDocRef.onSnapshot((docSnap)=>{
   applyPanCorrections(true);
   try{ localStorage.setItem(SALARY_CLOUD_CACHE_KEY, JSON.stringify(cloudCache)); }catch(e){}
   setSyncStatus('☁ Synced', '#065f46');
+  staffPartial = false;
   refreshAfterCloudUpdate();
-}, (err)=>{
+  if (isAdmin && !docSnap.metadata.hasPendingWrites) scheduleSlipPublish();
+}
+function salarySnapError(err){
+  salaryUnsub = null;
   console.error('Firestore sync error, using local cache:', err);
   setSyncStatus('⚠ Offline (local only)', '#b45309');
   try{
@@ -1185,12 +1197,16 @@ salaryDocRef.onSnapshot((docSnap)=>{
   }catch(e){ cloudCache = { months: {}, configs: {}, taxDecl: {} }; }
   applyPanCorrections(false);
   refreshAfterCloudUpdate();
-});
+}
+let salaryUnsub = null, staffPartial = false;
+function startSalarySync(){ if (!salaryUnsub) salaryUnsub = salaryDocRef.onSnapshot(salarySnapHandler, salarySnapError); }
+function stopSalarySync(){ if (salaryUnsub) { salaryUnsub(); salaryUnsub = null; } }
 
 function pushCloudCache(){
+  if (staffPartial || !isAdmin) { console.warn('Cloud push blocked (not admin / partial data)'); return; }
   setSyncStatus('☁ Saving…', '#1e3a8a');
   salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, taxDecl: cloudCache.taxDecl || {}, updatedAt: new Date().toISOString()})
-    .then(()=> setSyncStatus('☁ Synced', '#065f46'))
+    .then(()=> { setSyncStatus('☁ Synced', '#065f46'); scheduleSlipPublish(); })
     .catch((err)=>{
       console.error('Firestore save failed:', err);
       setSyncStatus('⚠ Save failed - check connection', '#b91c1c');
@@ -2569,7 +2585,29 @@ function psShowGate() {
   document.getElementById('ps-view').style.display = 'none';
 }
 
-function psVerify() {
+/* ---- Staff lookup: one document per employee per identity-pair (collection salarySlipLookup).
+   Document id = SHA-256 of the two identity details; nobody can list the collection. ---- */
+const SLIP_COL = 'salarySlipLookup';
+const SLIP_FS = 'https://firestore.googleapis.com/v1/projects/tfhs-portal/databases/(default)/documents/' + SLIP_COL + '/';
+async function slipSha(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('TFHS-SAL-v1|' + str));
+  return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function slipPairId(fa, va, fb, vb) { if (fa > fb) { [fa, va, fb, vb] = [fb, vb, fa, va]; } return slipSha(fa + '=' + va + '|' + fb + '=' + vb); }
+function slipDec(v) {
+  if (v == null) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(slipDec);
+  if ('mapValue' in v) { const o = {}, f = v.mapValue.fields || {}; Object.keys(f).forEach(k => o[k] = slipDec(f[k])); return o; }
+  return null;
+}
+
+async function psVerify() {
   const err = document.getElementById('ps-error'); err.textContent = '';
   let lock = psGetLock();
   if (lock.until > Date.now()) {
@@ -2580,15 +2618,37 @@ function psVerify() {
   if (f1 === f2) { err.textContent = 'Please choose two different identity details.'; return; }
   const v1 = psNorm(f1, document.getElementById('ps-v1').value), v2 = psNorm(f2, document.getElementById('ps-v2').value);
   if (!v1 || !v2) { err.textContent = 'Please fill in both details.'; return; }
-  const staffMap = psLatestStaffMap();
-  if (staffMap.size === 0) { err.textContent = 'Salary data is still loading. Please wait a moment and try again.'; return; }
-  let found = null;
-  staffMap.forEach(e => {
-    if (found) return;
-    const a = psFactorValue(e, f1), b = psFactorValue(e, f2);
-    if (a && b && a === v1 && b === v2) found = e;
-  });
-  if (!found) {
+
+  let code = null;
+  if (isAdmin && !staffPartial && Object.keys(cloudCache.months || {}).length) {
+    // Admin signed in: full data is already loaded, match locally.
+    let found = null;
+    psLatestStaffMap().forEach(e => {
+      if (found) return;
+      const a = psFactorValue(e, f1), b = psFactorValue(e, f2);
+      if (a && b && a === v1 && b === v2) found = e;
+    });
+    if (found) code = String(found.emp_code).trim().toUpperCase();
+  } else {
+    // Staff (no login): fetch ONLY the one document that belongs to these two details.
+    let doc = null;
+    try {
+      const id = await slipPairId(f1, v1, f2, v2);
+      const res = await fetch(SLIP_FS + id + '?key=' + firebaseConfig.apiKey, { cache: 'no-store' });
+      if (res.status === 404) doc = null;
+      else if (!res.ok) { err.textContent = 'Cannot load salary data right now (server said ' + res.status + '). Please try again later.'; return; }
+      else { const j = await res.json(); doc = {}; Object.keys(j.fields || {}).forEach(k => doc[k] = slipDec(j.fields[k])); }
+    } catch (e) {
+      err.textContent = 'Cannot reach the server. Please check your internet and try again.';
+      return;
+    }
+    if (doc && doc.code && doc.months) {
+      cloudCache = { months: doc.months || {}, configs: doc.configs || {}, taxDecl: doc.taxDecl || {} };
+      staffPartial = true;
+      code = String(doc.code).trim().toUpperCase();
+    }
+  }
+  if (!code) {
     lock.n = (lock.n || 0) + 1;
     if (lock.n >= 5) lock = { n: 0, until: Date.now() + 5 * 60000 };
     psSetLock(lock);
@@ -2596,13 +2656,70 @@ function psVerify() {
     return;
   }
   psSetLock({ n: 0, until: 0 });
-  psVerifiedCode = String(found.emp_code).trim().toUpperCase();
+  psVerifiedCode = code;
   document.getElementById('ps-v1').value = ''; document.getElementById('ps-v2').value = '';
   applyGuard();
   psShowSlip();
 }
 
-function psLogout() { psVerifiedCode = null; psTaxIn = {}; psTaxCtx = null; psMode = 'slip'; psShowGate(); applyGuard(); }
+/* ---- Admin: publish one slim document per employee per identity-pair (what the staff page reads) ---- */
+let slipPubTimer = null, slipPubBusy = false;
+function scheduleSlipPublish() { clearTimeout(slipPubTimer); slipPubTimer = setTimeout(() => publishSlipLookup(false), 3000); }
+function slipSig(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h) + ':' + str.length; }
+
+async function publishSlipLookup(force) {
+  if (!isAdmin || staffPartial || slipPubBusy) return;
+  const msg = document.getElementById('slipPubMsg');
+  const say = t => { if (msg) msg.textContent = t; };
+  const months = cloudCache.months || {};
+  if (!Object.keys(months).length) { say('No salary data loaded yet.'); return; }
+  slipPubBusy = true;
+  try {
+    say('Publishing…');
+    const idxSort = Object.keys(months).sort((a, b) => monthKeyToIndex(a) - monthKeyToIndex(b));
+    const latest = new Map();   // emp_code -> newest record
+    idxSort.forEach(m => (months[m] || []).forEach(e => { if (e.emp_code) latest.set(String(e.emp_code).trim().toUpperCase(), e); }));
+    let lastPub = {};
+    if (!force) { try { lastPub = JSON.parse(localStorage.getItem('TFHS_SAL_PUB') || '{}'); } catch (e) { lastPub = {}; } }
+    const FACTS = ['code', 'pan', 'dob', 'mob'];
+    const writes = new Map();   // doc id -> {payload, sig}
+    for (const [code, e] of latest) {
+      const pm = {};
+      idxSort.forEach(m => { pm[m] = (months[m] || []).filter(x => String(x.emp_code || '').trim().toUpperCase() === code).map(x => JSON.parse(JSON.stringify(x))); });
+      const td = {};
+      Object.keys(cloudCache.taxDecl || {}).forEach(k => { if (k.split('|')[0] === code) td[k] = cloudCache.taxDecl[k]; });
+      const payload = JSON.parse(JSON.stringify({ code, months: pm, configs: cloudCache.configs || {}, taxDecl: td }));
+      const sig = slipSig(JSON.stringify(payload));
+      const vals = {}; FACTS.forEach(f => { const v = psFactorValue(e, f); if (v) vals[f] = v; });
+      const fs = Object.keys(vals).sort();
+      for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++)
+        writes.set(await slipPairId(fs[i], vals[fs[i]], fs[j], vals[fs[j]]), { payload, sig });
+    }
+    const idsRef = db.collection('tfhs').doc('salarySlipIds');
+    const old = ((await idsRef.get()).data() || {}).ids || [];
+    const ids = [...writes.keys()];
+    const ops = [];
+    ids.forEach(id => { if (force || lastPub[id] !== writes.get(id).sig) ops.push({ id, del: false }); });
+    old.forEach(id => { if (!writes.has(id)) ops.push({ id, del: true }); });
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = db.batch();
+      ops.slice(i, i + 400).forEach(o => {
+        const ref = db.collection(SLIP_COL).doc(o.id);
+        if (o.del) b.delete(ref); else b.set(ref, Object.assign({}, writes.get(o.id).payload, { updatedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+      });
+      await b.commit();
+    }
+    await idsRef.set({ ids, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    const np = {}; ids.forEach(id => np[id] = writes.get(id).sig);
+    try { localStorage.setItem('TFHS_SAL_PUB', JSON.stringify(np)); } catch (e) {}
+    say('✓ Staff pay slips published for ' + latest.size + ' employees (' + ops.filter(o => !o.del).length + ' updated).');
+  } catch (e) {
+    console.error('Pay slip publish failed', e);
+    say('⚠ Publish failed: ' + (e.code || e.message));
+  } finally { slipPubBusy = false; }
+}
+
+function psLogout() { if (!isAdmin) { cloudCache = { months: {}, configs: {}, taxDecl: {} }; staffPartial = false; } psVerifiedCode = null; psTaxIn = {}; psTaxCtx = null; psMode = 'slip'; psShowGate(); applyGuard(); }
 
 // Months in which this employee has a saved record, latest first.
 function psMonthsFor(code) {
