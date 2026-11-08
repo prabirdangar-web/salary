@@ -589,11 +589,11 @@
     <div class="controls-card no-print" style="margin:0 0 16px 0;">
       <div class="control-group">
         <label>Audit Month A</label>
-        <select id="audit-month-a" onchange="renderAudit()" style="min-width:150px;"></select>
+        <select id="audit-month-a" onchange="auditUserPick=true;renderAudit()" style="min-width:150px;"></select>
       </div>
       <div class="control-group">
         <label>Compare Month B</label>
-        <select id="audit-month-b" onchange="renderAudit()" style="min-width:150px;"></select>
+        <select id="audit-month-b" onchange="auditUserPick=true;renderAudit()" style="min-width:150px;"></select>
       </div>
       <button class="btn btn-primary" onclick="renderAudit()">🔄 Refresh Audit</button>
     </div>
@@ -1234,7 +1234,7 @@ function refreshAfterCloudUpdate(){
   }
   populateMonthDropdowns();
   const main = document.getElementById('cfgMonthPicker');
-  main.value = main.value || '2026-07';
+  main.value = main.value || monthDisplayToISO(getSavedMonthsDesc()[0]);
   staffData = loadMonthData(parseMonthPickerValue(main.value));
   applyConfig(loadMonthConfig(parseMonthPickerValue(main.value)));
   renderAll();
@@ -1360,25 +1360,29 @@ function findPreviousMonthWithData(monthStr) {
   });
   return laterKey ? cloudCache.months[laterKey] : null;
 }
+// Newest month first (current month ... oldest) for every month dropdown.
+function getSavedMonthsDesc() { return getSavedMonths().slice().reverse(); }
+// Until the user picks a month by hand, the page always opens on the LATEST month available.
+let monthAutoLatest = true, auditUserPick = false;
 function populateMonthDropdowns() {
-  const months = getSavedMonths();
+  const months = getSavedMonthsDesc();           // [0] = latest month
   const main = document.getElementById('cfgMonthPicker');
-  const current = main.value || '2026-07';
+  const current = main.value;
   main.innerHTML = months.map(m => `<option value="${monthDisplayToISO(m)}">${m.replace('-', ' ')}</option>`).join('');
-  
-  const curDisp = parseMonthPickerValue(current);
-  if (months.includes(curDisp)) {
+
+  const curDisp = current ? parseMonthPickerValue(current) : '';
+  if (!monthAutoLatest && curDisp && months.includes(curDisp)) {
     main.value = monthDisplayToISO(curDisp);
   } else {
-    main.value = monthDisplayToISO(months[months.length - 1]);
+    main.value = monthDisplayToISO(months[0]);
   }
 
   ['audit-month-a', 'audit-month-b'].forEach((id, idx) => {
     const el = document.getElementById(id); if (!el) return;
     const old = el.value;
     el.innerHTML = months.map(m => `<option value="${m}">${m.replace('-', ' ')}</option>`).join('');
-    if (months.includes(old)) el.value = old;
-    else el.value = months[Math.max(0, months.length - 1 - idx)];
+    if (months.includes(old) && auditUserPick) el.value = old;
+    else el.value = months[Math.min(idx, months.length - 1)];   // A = latest, B = previous month
   });
 }
 
@@ -1397,6 +1401,7 @@ function loadMonthData(monthStr) {
 // Bonus / Arrear belong to one month only - strip them whenever a month is created by copying another.
 function stripOneTime(arr) { (arr || []).forEach(e => { e.bonus = 0; e.arrear = 0; e.addlPtax = 0; e.addlItax = 0; e.arrearNote = ''; }); return arr; }
 function onMonthPickerChange() {
+  monthAutoLatest = false;
   const monthStr = parseMonthPickerValue(document.getElementById('cfgMonthPicker').value);
   document.getElementById('cfgMonth').value = monthStr;
   staffData = loadMonthData(monthStr);
@@ -2746,7 +2751,7 @@ function psShowSlip() {
 
 function psRender(resetMonth) {
   if (!psVerifiedCode) return;
-  const months = psMonthsFor(psVerifiedCode);
+  const months = psMonthsFor(psVerifiedCode).slice().sort((a, b) => monthKeyToIndex(b) - monthKeyToIndex(a));   // newest -> oldest
   const sel = document.getElementById('ps-month');
   const old = sel.value;
   sel.innerHTML = months.map(m => `<option value="${m}">${m.replace('-', ' ')}</option>`).join('');
