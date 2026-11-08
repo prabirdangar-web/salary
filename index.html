@@ -16,6 +16,8 @@
   (function(){ try {
     var sa = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || /[?&]staff=1/.test(location.search);
     if (sa) document.documentElement.classList.add('staff-app');
+    // Admin entry: the admin login box is hidden for everyone unless the page is opened with ?admin=1 (or #admin).
+    if (/[?&#]admin/.test(location.search + location.hash) && !/[?&]staff=1/.test(location.search)) document.documentElement.classList.add('admin-entry');
   } catch(e){} })();
 </script>
 <title>Taldangra Fulmati High School [H.S.] - Salary Portal</title>
@@ -318,6 +320,7 @@
   }
   /* ===== Staff mobile app ===== */
   .staff-app #authPanel { display:none !important; }
+  html:not(.admin-entry) #authPanel { display:none !important; }   /* staff-facing page: no admin login box */
   .staff-app body { padding-top: env(safe-area-inset-top, 0); padding-bottom: env(safe-area-inset-bottom, 0); }
   .ps-install { display:none; width:100%; margin-top:10px; justify-content:center; padding:10px; }
   .ps-install-hint { display:none; margin-top:10px; font-size:12px; color:#4a5568; background:#ebf8ff; border-radius:6px; padding:8px 10px; }
@@ -1152,6 +1155,7 @@ function applyGuard(){
 }
 function onSalaryAuth(user){
   isAdmin = !!user;
+  if (isAdmin) document.documentElement.classList.add('admin-entry');
   document.body.classList.toggle('is-admin', isAdmin);
   applyGuard();
   if (isAdmin) { if (applyPanCorrections(true)) { staffData = loadMonthData(parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || '2026-07')); renderAll(); } }
