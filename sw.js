@@ -2,7 +2,7 @@
    Page itself: network first, always revalidated with the server (bypasses the browser's 10-minute GitHub Pages cache); cached copy only when offline.
    Firebase scripts (gstatic): cached after first load so the app opens faster.
    Firestore / login traffic is never touched. Bump VERSION to force an update. */
-const VERSION = 'tfhs-salary-v2';
+const VERSION = 'tfhs-salary-v3';
 const CORE = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
