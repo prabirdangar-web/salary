@@ -981,6 +981,7 @@ const DEFAULT_MARCH_STAFF = []; /* staff data removed from public page source - 
 // Cloud sync (Firebase) — bundles every per-month key into ONE Firestore document
 let cloudCache = { months: {}, configs: {}, taxDecl: {} };
 let isAdmin = false;
+const ADMIN_EMAIL = 'prabir.dangar@gmail.com';
 
 /* Corrected PANs (by Employee Code). Applied to ALL saved months on every load, so old saved
    data can never bring back a wrong PAN; admin login also writes the fix back to the cloud. */
@@ -1015,9 +1016,10 @@ function applyGuard(){
   b.classList.toggle('staff-only', !isAdmin && !!psVerifiedCode);
 }
 function onSalaryAuth(user){
-  isAdmin = !!user;
+  isAdmin = !!user && String(user.email || '').toLowerCase() === ADMIN_EMAIL;   // only the school admin account; any other signed-in user = staff
   if (isAdmin) document.documentElement.classList.add('admin-entry');
   document.body.classList.toggle('is-admin', isAdmin);
+  if (user && !isAdmin && auth) { try { auth.signOut(); } catch (e) {} }
   applyGuard();
   if (isAdmin) { if (applyPanCorrections(true)) { staffData = loadMonthData(parseMonthPickerValue(document.getElementById('cfgMonthPicker').value || '2026-07')); renderAll(); } }
   document.getElementById('authLoggedOut').style.display = isAdmin ? 'none' : '';
