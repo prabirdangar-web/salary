@@ -2436,7 +2436,8 @@ function psFactorValue(emp, factor) {
   const map = { code: emp.emp_code, pan: emp.pan, dob: emp.dob, mob: emp.mob_no };
   return psNorm(factor, map[factor]);
 }
-function psGetLock() { try { return JSON.parse(localStorage.getItem(PS_LOCK_KEY)) || { n: 0, until: 0 }; } catch (e) { return { n: 0, until: 0 }; } }
+const PS_MAX_TRIES = 3;   // consecutive wrong attempts allowed before the lock
+function psGetLock() { try { return Object.assign({ n: 0, until: 0, lk: 0 }, JSON.parse(localStorage.getItem(PS_LOCK_KEY)) || {}); } catch (e) { return { n: 0, until: 0, lk: 0 }; } }
 function psSetLock(o) { try { localStorage.setItem(PS_LOCK_KEY, JSON.stringify(o)); } catch (e) {} }
 
 // Latest saved record per employee code (later months overwrite earlier ones).
@@ -2531,12 +2532,19 @@ async function psVerify() {
   }
   if (!code) {
     lock.n = (lock.n || 0) + 1;
-    if (lock.n >= 5) lock = { n: 0, until: Date.now() + 5 * 60000 };
+    if (lock.n >= PS_MAX_TRIES) {
+      lock.lk = (lock.lk || 0) + 1;
+      const mins = lock.lk <= 1 ? 15 : 60;   // first lock 15 min, repeated locks 60 min
+      lock = { n: 0, until: Date.now() + mins * 60000, lk: lock.lk };
+      psSetLock(lock);
+      err.textContent = 'Details did not match. ' + PS_MAX_TRIES + ' wrong attempts - locked for ' + mins + ' minutes.';
+      return;
+    }
     psSetLock(lock);
-    err.textContent = 'The details did not match our records. Please check and try again.';
+    err.textContent = 'The details did not match our records. ' + (PS_MAX_TRIES - lock.n) + ' attempt(s) left before the page locks.';
     return;
   }
-  psSetLock({ n: 0, until: 0 });
+  psSetLock({ n: 0, until: 0, lk: 0 });
   psVerifiedCode = code;
   document.getElementById('ps-v1').value = ''; document.getElementById('ps-v2').value = '';
   applyGuard();
