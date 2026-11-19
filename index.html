@@ -407,6 +407,7 @@
     <button class="nav-tab" onclick="switchTab('fy')">📅 FY Report</button>
     <button class="nav-tab" onclick="switchTab('payslip')">🧾 My Pay Slip</button>
     <button class="nav-tab admin-only" onclick="switchTab('itaxadmin')">💰 I.Tax (Admin)</button>
+    <button class="nav-tab admin-only" onclick="switchTab('para')">🧑‍🏫 Para Teachers</button>
   </div>
 </div>
 
@@ -737,7 +738,64 @@
     <div id="itxa-sheet"></div>
   </div>
 
-  <!-- ================= TAB 4: STAFF DIRECTORY & ENTRY ================= -->
+  <!-- ================= PARA TEACHERS (separate table, live-synced) ================= -->
+<div id="tab-para" class="tab-content">
+<div class="controls-card no-print" style="margin:0 0 16px 0;">
+  <div class="control-group"><label>Salary Month</label><input type="month" id="para-month" onchange="paraRender()"></div>
+  <div class="control-group"><label>Medium</label><select id="para-medium" onchange="paraRender()"><option value="ALL">ALL</option><option value="BENGALI">BENGALI</option><option value="SANTALI">SANTALI</option></select></div>
+  <div class="control-group"><label>EPF %</label><input type="number" id="para-epfpct" min="0" max="100" step="0.01" style="width:80px" oninput="paraCfgChange()"></div>
+  <div class="control-group"><label>EPF Max (₹) 0 = no limit</label><input type="number" id="para-epfcap" min="0" step="1" style="width:120px" oninput="paraCfgChange()"></div>
+  <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-success" onclick="paraOpenModal(-1)">➕ Add Para Teacher</button>
+    <button class="btn btn-primary" onclick="paraSaveMonth()">💾 Save This Month</button>
+    <button class="btn btn-outline" onclick="paraSlips(null)">🧾 All Pay Slips</button>
+    <button class="btn btn-outline" onclick="paraPrintTable()">🖨️ Print Statement</button>
+  </div>
+</div>
+<div id="para-msg" class="ps-hint no-print" style="display:none;"></div>
+<style>
+.para-slip{width:190mm;max-width:100%;margin:0 auto 10px;border:1.4px solid #1a365d;padding:5mm 6mm;background:#fff;font-size:11.5px;color:#111;box-sizing:border-box}
+.para-slip h4{margin:0;text-align:center;font-size:15px;color:#1a365d;font-weight:800}
+.para-slip .pst{text-align:center;font-weight:700;margin:3px 0 6px;font-size:12px}
+.para-slip table{width:100%;border-collapse:collapse;margin-top:6px}
+.para-slip td,.para-slip th{border:1px solid #1a365d;padding:3px 6px;text-align:left}
+.para-slip th{background:#e6edf7}
+.para-slip td.r,.para-slip th.r{text-align:right}
+.para-slip .sg{display:flex;justify-content:space-between;margin-top:26px;font-size:10.5px;font-weight:700}
+@media print{ body.para-slips-only #para-sheet{display:none!important} body.para-slips-only #para-slipbox{display:block!important} .para-slip{margin:0 auto 8mm;page-break-inside:avoid} .para-slip:nth-child(2n){page-break-after:always} }
+</style>
+<div id="para-slipbox" style="display:none;margin:0 0 16px 0;"></div>
+<div class="table-responsive" id="para-sheet"></div>
+<div class="table-responsive no-print" style="margin-top:16px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+    <h3 style="margin:0;font-size:15px;color:var(--primary);">👁 Individual Live View</h3>
+    <select id="para-ind" onchange="paraIndRender()" style="min-width:260px;"></select>
+    <span style="font-size:11px;color:#718096;">Updates automatically when any computer saves a change. Months appear once you press "Save This Month" or enter LWP.</span>
+  </div>
+  <div id="para-ind-out"></div>
+</div>
+<div class="modal-overlay" id="paraModal"><div class="modal-card" style="max-width:560px;">
+  <h3 id="paraModalTitle" style="margin-top:0;color:var(--primary);">Para Teacher</h3>
+  <input type="hidden" id="pm-idx" value="-1">
+  <div class="form-grid">
+    <div class="form-group full-width"><label>Name</label><input id="pm-name" type="text" style="text-transform:uppercase"></div>
+    <div class="form-group"><label>Medium</label><select id="pm-medium"><option>BENGALI</option><option>SANTALI</option></select></div>
+    <div class="form-group"><label>Date of Birth</label><input id="pm-dob" type="text" placeholder="dd.mm.yyyy"></div>
+    <div class="form-group"><label>Qualification</label><input id="pm-qual" type="text"></div>
+    <div class="form-group"><label>Date of Joining</label><input id="pm-doj" type="text" placeholder="dd.mm.yyyy"></div>
+    <div class="form-group"><label>Bank &amp; Branch</label><input id="pm-bank" type="text" placeholder="SBI TALDANGRA"></div>
+    <div class="form-group"><label>Account No.</label><input id="pm-acc" type="text"></div>
+    <div class="form-group"><label>IFS Code</label><input id="pm-ifsc" type="text"></div>
+    <div class="form-group"><label>Mobile (optional)</label><input id="pm-mob" type="text"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:16px;">
+    <button class="btn btn-danger" id="pm-del" onclick="paraDelete()">Delete</button>
+    <div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="paraCloseModal()">Cancel</button><button class="btn btn-success" onclick="paraSaveTeacher()">Save</button></div>
+  </div>
+</div></div>
+</div>
+
+<!-- ================= TAB 4: STAFF DIRECTORY & ENTRY ================= -->
   <div id="tab-staff" class="tab-content">
     <div class="table-responsive">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
@@ -1052,6 +1110,7 @@ function salarySnapHandler(docSnap){
     cloudCache.months = data.months || {};
     cloudCache.configs = data.configs || {};
     cloudCache.taxDecl = data.taxDecl || {};
+cloudCache.para = data.para || {};
   } else {
     cloudCache = { months: {}, configs: {}, taxDecl: {} };
   }
@@ -1081,7 +1140,7 @@ function stopSalarySync(){ if (salaryUnsub) { salaryUnsub(); salaryUnsub = null;
 function pushCloudCache(){
   if (staffPartial || !isAdmin) { console.warn('Cloud push blocked (not admin / partial data)'); return; }
   setSyncStatus('☁ Saving…', '#1e3a8a');
-  salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, taxDecl: cloudCache.taxDecl || {}, updatedAt: new Date().toISOString()})
+  salaryDocRef.set({months: cloudCache.months, configs: cloudCache.configs, taxDecl: cloudCache.taxDecl || {}, para: cloudCache.para || {}, updatedAt: new Date().toISOString()})
     .then(()=> { setSyncStatus('☁ Synced', '#065f46'); scheduleSlipPublish(); })
     .catch((err)=>{
       console.error('Firestore save failed:', err);
@@ -1408,7 +1467,8 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('tab-' + tabId).classList.add('active');
-  document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin') ? 'none' : '';
+  document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin' || tabId === 'para') ? 'none' : '';
+if (tabId === 'para') paraInit();
   if (tabId === 'itaxadmin') itxaInit();
   if (tabId === 'payslip') initPaySlipTab();
   
@@ -3012,7 +3072,107 @@ function renderAll() {
   renderPayCertOptions();
   renderLPCOptions();
   renderStaffTable();
+paraRender();
 }
+
+/* ===== PARA TEACHERS: separate table kept in the same cloud document (field "para") so existing admin rules apply ===== */
+const PARA_PAY_OLD=15523, PARA_PAY_NEW=20523, PARA_EFFECTIVE=new Date(2026,9,1);
+const PARA_DEFAULT=[
+{name:"BHARATI DEY",medium:"BENGALI",dob:"12.07.1973",qual:"B.A.(GEO)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171567657",ifsc:"SBIN0012397"},
+{name:"RINKU BHUIN",medium:"BENGALI",dob:"01.03.1980",qual:"B.A.(Beng)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171603530",ifsc:"SBIN0012397"},
+{name:"BISWARUP DEY",medium:"BENGALI",dob:"12.04.1987",qual:"B.A.(Eng)",doj:"17.12.2008",bank:"SBI TALDANGRA",acc:"32169323535",ifsc:"SBIN0012397"},
+{name:"DOLI MONDAL",medium:"BENGALI",dob:"17.01.1975",qual:"B.Sc.(Pure Sc.)",doj:"1st: 03.01.2007 / 2nd: 02.02.2010",bank:"SBI TALDANGRA",acc:"32171877251",ifsc:"SBIN0012397"},
+{name:"GANESH MANDI",medium:"SANTALI",dob:"04.01.1993",qual:"B.A.(Hons)",doj:"02.03.2015",bank:"UBI SIMLAPAL",acc:"0448010233552",ifsc:"PUNB0044820"},
+{name:"BIKASH BASKEY",medium:"SANTALI",dob:"18.10.1980",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35720612096",ifsc:"SBIN0012397"},
+{name:"LAKSHMI SAREN",medium:"SANTALI",dob:"25.02.1989",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35702689775",ifsc:"SBIN0012397"}
+];
+const PARA_MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+let paraPushTimer=null;
+function paraData(){ if(!cloudCache.para||typeof cloudCache.para!=='object') cloudCache.para={}; const p=cloudCache.para; if(!Array.isArray(p.teachers)) p.teachers=[]; if(!p.months||typeof p.months!=='object') p.months={}; if(!p.cfg) p.cfg={pct:12,cap:1800}; return p; }
+function paraSchedulePush(){ clearTimeout(paraPushTimer); setSyncStatus('☁ Saving…','#1e3a8a'); paraPushTimer=setTimeout(()=>{ try{ localStorage.setItem(SALARY_CLOUD_CACHE_KEY, JSON.stringify(cloudCache)); }catch(e){} pushCloudCache(); },800); }
+function paraEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function paraInr(n){ return Number(n).toLocaleString('en-IN'); }
+function paraCycle(ym){ const a=ym.split('-').map(Number), y=a[0], m=a[1]-1; const start=new Date(y,m-1,11), end=new Date(y,m,10); const d2=n=>String(n).padStart(2,'0'); const f=d=>d2(d.getDate())+'.'+d2(d.getMonth()+1)+'.'+d.getFullYear(); return {start,end,days:Math.round((end-start)/864e5)+1,label:PARA_MONTHS[m]+'-'+y,period:f(start)+' to '+f(end)}; }
+function paraPay(end){ return end>=PARA_EFFECTIVE?PARA_PAY_NEW:PARA_PAY_OLD; }
+function paraPtax(g,end){ if(end>=PARA_EFFECTIVE){ if(g<=20000)return 0; if(g<=30000)return 100; if(g<=50000)return 140; if(g<=100000)return 170; return 208; } if(g<=10000)return 0; if(g<=15000)return 110; if(g<=25000)return 130; if(g<=40000)return 150; return 200; }
+function paraEpf(g){ const c=paraData().cfg, v=Math.round(g*(parseFloat(c.pct)||0)/100), cap=parseFloat(c.cap)||0; return cap>0?Math.min(v,cap):v; }
+function paraCalc(cy,lwp){ const full=paraPay(cy.end); let l=Math.max(0,Math.min(cy.days,parseFloat(lwp)||0)); const g=Math.round(full*(cy.days-l)/cy.days), t=paraPtax(g,cy.end), e=paraEpf(g); return {lwp:l,full,g,t,e,n:g-t-e}; }
+function paraDefaultMonth(){ const now=new Date(); let y=now.getFullYear(), m=now.getMonth(); if(now.getDate()>10){ m++; if(m>11){m=0;y++;} } return y+'-'+String(m+1).padStart(2,'0'); }
+function paraInit(){
+  const p=paraData();
+  if(!p.teachers.length){ p.teachers=PARA_DEFAULT.map((t,i)=>Object.assign({id:'PT'+(i+1)},t)); paraSchedulePush(); }
+  const mi=document.getElementById('para-month'); if(!mi.value) mi.value=paraDefaultMonth();
+  paraRender(true);
+}
+function paraRender(force){
+  if(!isAdmin) return;
+  const act=document.activeElement; if(!force && act && act.classList && act.classList.contains('para-in')) return;
+  const p=paraData(), mi=document.getElementById('para-month'); if(!mi||!mi.value) return;
+  if(document.activeElement!==document.getElementById('para-epfpct')) document.getElementById('para-epfpct').value=p.cfg.pct;
+  if(document.activeElement!==document.getElementById('para-epfcap')) document.getElementById('para-epfcap').value=p.cfg.cap;
+  const ym=mi.value, cy=paraCycle(ym), med=document.getElementById('para-medium').value, lw=((p.months[ym]||{}).lwp)||{};
+  const list=p.teachers.map((t,i)=>({t,i})).filter(o=>med==='ALL'||o.t.medium===med);
+  let h='<div style="text-align:center;margin-bottom:10px;"><div style="font-size:17px;font-weight:800;color:var(--primary);">TALDANGRA FULMATI HIGH SCHOOL (H.S.)</div><div style="font-size:12px;font-weight:600;">SALARY STATEMENT OF PARA TEACHER (UPPER PRIMARY) FOR THE MONTH OF '+cy.label.toUpperCase()+(med!=='ALL'?' &ndash; '+med+' MEDIUM':'')+'</div><div style="font-size:11px;color:#4a5568;">Period '+cy.period+' ('+cy.days+' days) &nbsp;|&nbsp; Gross remuneration ₹'+paraInr(paraPay(cy.end))+' &nbsp;|&nbsp; EPF '+p.cfg.pct+'% '+(parseFloat(p.cfg.cap)>0?'(max ₹'+paraInr(p.cfg.cap)+')':'(no limit)')+'</div></div>';
+  h+='<table class="sheet-table"><thead><tr><th>Sl</th><th>Name of Employee</th><th>Medium</th><th>Bank &amp; Branch</th><th>Account No.</th><th>IFS Code</th><th>LWP Days</th><th>Gross</th><th>P.Tax</th><th>EPF</th><th>Net Salary</th><th class="no-print">Edit</th></tr></thead><tbody>';
+  list.forEach((o,k)=>{ const t=o.t, c=paraCalc(cy,lw[t.id]);
+    h+='<tr data-id="'+paraEsc(t.id)+'"><td class="center bold">'+(k+1)+'</td><td><strong>'+paraEsc(t.name)+'</strong><br><small style="color:#718096;">'+paraEsc(t.dob)+' | '+paraEsc(t.qual)+'</small></td><td class="center">'+paraEsc(t.medium)+'</td><td class="center">'+paraEsc(t.bank)+'</td><td class="center">'+paraEsc(t.acc)+'</td><td class="center">'+paraEsc(t.ifsc)+'</td>'
+     +'<td class="center"><input class="para-in" type="number" min="0" max="'+cy.days+'" step="0.5" value="'+(lw[t.id]||'')+'" style="width:60px;text-align:center;" oninput="paraLwp(\''+paraEsc(t.id)+'\',this.value)"></td>'
+     +'<td class="center pg">'+paraInr(c.g)+'</td><td class="center pt">'+paraInr(c.t)+'</td><td class="center pe">'+paraInr(c.e)+'</td><td class="center bold pn">'+paraInr(c.n)+'</td><td class="center no-print"><button class="btn btn-outline" style="padding:3px 8px;font-size:11px;" onclick="paraOpenModal('+o.i+')">✏️</button> <button class="btn btn-outline" style="padding:3px 8px;font-size:11px;" title="Pay slip" onclick="paraSlips(\''+paraEsc(t.id)+'\')">🧾</button></td></tr>'; });
+  if(!list.length) h+='<tr><td colspan="12" class="center">No para teachers in this selection.</td></tr>';
+  h+='</tbody><tfoot><tr><td colspan="7" class="center bold">TOTAL</td><td class="center bold" id="para-tg"></td><td class="center bold" id="para-tt"></td><td class="center bold" id="para-te"></td><td class="center bold" id="para-tn"></td><td class="no-print"></td></tr></tfoot></table>'
+     +'<div style="display:flex;justify-content:space-between;margin-top:46px;font-size:11px;font-weight:700;"><div>Signature of Administrator / Secretary / President</div><div>Signature of Headmaster (with school seal)</div></div>';
+  document.getElementById('para-sheet').innerHTML=h;
+  paraTotals();
+  const sel=document.getElementById('para-ind'), keep=sel.value;
+  sel.innerHTML=p.teachers.map(t=>'<option value="'+paraEsc(t.id)+'">'+paraEsc(t.name)+' ('+paraEsc(t.medium)+')</option>').join('');
+  if(keep && p.teachers.some(t=>t.id===keep)) sel.value=keep;
+  paraIndRender();
+}
+function paraTotals(){ let g=0,t=0,e=0,n=0; document.querySelectorAll('#para-sheet tbody tr[data-id]').forEach(r=>{ const v=c=>parseInt((r.querySelector(c).textContent||'0').replace(/,/g,''))||0; g+=v('.pg'); t+=v('.pt'); e+=v('.pe'); n+=v('.pn'); }); const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=paraInr(v); }; set('para-tg',g); set('para-tt',t); set('para-te',e); set('para-tn',n); }
+function paraRecalcRows(){ const ym=document.getElementById('para-month').value, cy=paraCycle(ym), lw=((paraData().months[ym]||{}).lwp)||{};
+  document.querySelectorAll('#para-sheet tbody tr[data-id]').forEach(r=>{ const c=paraCalc(cy,lw[r.dataset.id]); r.querySelector('.pg').textContent=paraInr(c.g); r.querySelector('.pt').textContent=paraInr(c.t); r.querySelector('.pe').textContent=paraInr(c.e); r.querySelector('.pn').textContent=paraInr(c.n); }); paraTotals(); }
+function paraLwp(id,val){ const ym=document.getElementById('para-month').value, p=paraData(); p.months[ym]=p.months[ym]||{}; p.months[ym].lwp=p.months[ym].lwp||{}; const v=parseFloat(val); if(!v||v<=0) delete p.months[ym].lwp[id]; else p.months[ym].lwp[id]=v; p.months[ym].updatedAt=new Date().toISOString(); paraRecalcRows(); paraSchedulePush(); }
+function paraCfgChange(){ const p=paraData(); p.cfg.pct=parseFloat(document.getElementById('para-epfpct').value)||0; p.cfg.cap=parseFloat(document.getElementById('para-epfcap').value)||0; paraRecalcRows(); paraSchedulePush(); }
+function paraSaveMonth(){ const ym=document.getElementById('para-month').value, p=paraData(); p.months[ym]=p.months[ym]||{}; p.months[ym].lwp=p.months[ym].lwp||{}; p.months[ym].updatedAt=new Date().toISOString(); paraSchedulePush(); const m=document.getElementById('para-msg'); m.style.display=''; m.textContent='Saved '+paraCycle(ym).label+' – visible on all computers.'; paraIndRender(); }
+function paraIndRender(){ const out=document.getElementById('para-ind-out'); if(!out) return; const p=paraData(), id=document.getElementById('para-ind').value, t=p.teachers.find(x=>x.id===id); if(!t){ out.innerHTML=''; return; }
+  const set=new Set(Object.keys(p.months)); const cur=document.getElementById('para-month').value; if(cur) set.add(cur); const yms=[...set].sort().reverse();
+  let tot=0, h='<div style="font-size:12px;margin-bottom:6px;"><b>'+paraEsc(t.name)+'</b> &nbsp;|&nbsp; '+paraEsc(t.medium)+' Medium &nbsp;|&nbsp; DOB '+paraEsc(t.dob)+' &nbsp;|&nbsp; DOJ '+paraEsc(t.doj)+' &nbsp;|&nbsp; A/c '+paraEsc(t.bank)+' '+paraEsc(t.acc)+'</div><table class="sheet-table"><thead><tr><th>Month</th><th>Period</th><th>LWP</th><th>Gross</th><th>P.Tax</th><th>EPF</th><th>Net</th></tr></thead><tbody>';
+  yms.forEach(ym=>{ const cy=paraCycle(ym), c=paraCalc(cy,((p.months[ym]||{}).lwp||{})[id]); tot+=c.n; h+='<tr><td class="center bold">'+cy.label+'</td><td class="center">'+cy.period+'</td><td class="center">'+(c.lwp||'-')+'</td><td class="center">'+paraInr(c.g)+'</td><td class="center">'+paraInr(c.t)+'</td><td class="center">'+paraInr(c.e)+'</td><td class="center bold">'+paraInr(c.n)+'</td></tr>'; });
+  out.innerHTML=h+'</tbody><tfoot><tr><td colspan="6" class="center bold">TOTAL NET (months shown)</td><td class="center bold">'+paraInr(tot)+'</td></tr></tfoot></table>'; }
+
+function paraSlipHtml(t,ym){ const cy=paraCycle(ym), lw=((paraData().months[ym]||{}).lwp)||{}, c=paraCalc(cy,lw[t.id]), cfg=paraData().cfg, ded=c.full-c.g;
+  const w=String(numberToWordsINR(c.n)).replace(/^\s*Rupees\s*/i,'').replace(/\s*Only\s*$/i,'');
+  return '<div class="para-slip"><h4>TALDANGRA FULMATI HIGH SCHOOL (H.S.)</h4><div style="text-align:center;font-size:10.5px;">P.O. &amp; Block - Taldangra, Sub-Division - Khatra, District - Bankura, West Bengal - 722152</div><div class="pst">PAY SLIP &ndash; PARA TEACHER (UPPER PRIMARY) &nbsp;|&nbsp; MONTH OF '+cy.label.toUpperCase()+'</div>'
+   +'<table><tr><td><b>Name</b></td><td colspan="3"><b>'+paraEsc(t.name)+'</b> ('+paraEsc(t.medium)+' Medium)</td></tr>'
+   +'<tr><td><b>Date of Birth</b></td><td>'+paraEsc(t.dob)+'</td><td><b>Date of Joining</b></td><td>'+paraEsc(t.doj)+'</td></tr>'
+   +'<tr><td><b>Qualification</b></td><td>'+paraEsc(t.qual)+'</td><td><b>Pay Period</b></td><td>'+cy.period+' ('+cy.days+' days)</td></tr>'
+   +'<tr><td><b>Bank &amp; Branch</b></td><td>'+paraEsc(t.bank)+'</td><td><b>Account / IFSC</b></td><td>'+paraEsc(t.acc)+' / '+paraEsc(t.ifsc)+'</td></tr>'
+   +'<tr><td><b>LWP Days</b></td><td>'+(c.lwp||'Nil')+'</td><td><b>Days Paid</b></td><td>'+(cy.days-c.lwp)+' of '+cy.days+'</td></tr></table>'
+   +'<table><thead><tr><th>EARNINGS</th><th class="r">₹</th><th>DEDUCTIONS</th><th class="r">₹</th></tr></thead><tbody>'
+   +'<tr><td>Fixed Remuneration</td><td class="r">'+paraInr(c.full)+'</td><td>Professional Tax</td><td class="r">'+paraInr(c.t)+'</td></tr>'
+   +'<tr><td>Less: LWP ('+(c.lwp||0)+' day'+(c.lwp==1?'':'s')+')</td><td class="r">'+(ded?'-'+paraInr(ded):'0')+'</td><td>EPF ('+cfg.pct+'%'+(parseFloat(cfg.cap)>0?', max ₹'+paraInr(cfg.cap):'')+')</td><td class="r">'+paraInr(c.e)+'</td></tr>'
+   +'<tr><td><b>Gross Payable</b></td><td class="r"><b>'+paraInr(c.g)+'</b></td><td><b>Total Deduction</b></td><td class="r"><b>'+paraInr(c.t+c.e)+'</b></td></tr>'
+   +'<tr><td colspan="3" style="background:#f0f6ff"><b>NET SALARY PAYABLE</b></td><td class="r" style="background:#f0f6ff"><b>₹ '+paraInr(c.n)+'</b></td></tr></tbody></table>'
+   +'<div style="margin-top:5px;font-size:11px;">Rupees (in words): <b>Rupees '+paraEsc(w)+' Only</b></div>'
+   +'<div class="sg"><div>Signature of Para Teacher</div><div>Signature of Headmaster<br>'+'PRABIR KUMAR DANGAR'+' (with school seal)</div></div></div>'; }
+function paraSlips(id){ const p=paraData(), ym=document.getElementById('para-month').value; if(!ym) return; const med=document.getElementById('para-medium').value;
+  const list=id?p.teachers.filter(t=>t.id===id):p.teachers.filter(t=>med==='ALL'||t.medium===med);
+  const box=document.getElementById('para-slipbox');
+  box.innerHTML='<div class="no-print" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><b style="color:var(--primary);">Pay Slip'+(list.length>1?'s':'')+' &ndash; '+paraCycle(ym).label+'</b><button class="btn btn-primary" onclick="paraPrintSlips()">🖨️ Print Pay Slip'+(list.length>1?'s (2 per page)':'')+'</button><button class="btn btn-outline" onclick="paraCloseSlips()">✖ Close</button></div>'+list.map(t=>paraSlipHtml(t,ym)).join('');
+  box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'start'}); }
+function paraCloseSlips(){ const b=document.getElementById('para-slipbox'); b.style.display='none'; b.innerHTML=''; paraClearPrintMode(); }
+function paraClearPrintMode(){ document.body.classList.remove('para-slips-only'); const st=document.getElementById('paraPageStyle'); if(st) st.remove(); }
+function paraPrintSlips(){ paraClearPrintMode(); const st=document.createElement('style'); st.id='paraPageStyle'; st.textContent='@page { size: A4 portrait; margin: 8mm; }'; document.head.appendChild(st); document.body.classList.add('para-slips-only'); window.print(); }
+function paraPrintTable(){ paraClearPrintMode(); const st=document.createElement('style'); st.id='paraPageStyle'; st.textContent='@page { size: A4 landscape; margin: 8mm; } @media print{ #para-slipbox{display:none!important} }'; document.head.appendChild(st); window.print(); }
+function paraOpenModal(i){ const p=paraData(), t=i>=0?p.teachers[i]:{}; document.getElementById('pm-idx').value=i; document.getElementById('paraModalTitle').textContent=i>=0?'Edit Para Teacher':'Add Para Teacher';
+  [['name','name'],['medium','medium'],['dob','dob'],['qual','qual'],['doj','doj'],['bank','bank'],['acc','acc'],['ifsc','ifsc'],['mob','mob']].forEach(a=>{ document.getElementById('pm-'+a[0]).value=t[a[1]]||(a[0]==='medium'?'BENGALI':''); });
+  document.getElementById('pm-del').style.display=i>=0?'':'none'; document.getElementById('paraModal').classList.add('active'); }
+function paraCloseModal(){ document.getElementById('paraModal').classList.remove('active'); }
+function paraSaveTeacher(){ const g=k=>document.getElementById('pm-'+k).value.trim(); const name=g('name').toUpperCase(); if(!name){ alert('Enter the name.'); return; }
+  const p=paraData(), i=parseInt(document.getElementById('pm-idx').value), rec={name,medium:g('medium'),dob:g('dob'),qual:g('qual'),doj:g('doj'),bank:g('bank'),acc:g('acc'),ifsc:g('ifsc'),mob:g('mob')};
+  if(i>=0) p.teachers[i]=Object.assign({},p.teachers[i],rec); else p.teachers.push(Object.assign({id:'PT'+Date.now().toString(36)},rec));
+  paraCloseModal(); paraRender(true); paraSchedulePush(); }
+function paraDelete(){ const p=paraData(), i=parseInt(document.getElementById('pm-idx').value); if(i<0) return; if(!confirm('Delete '+p.teachers[i].name+'? Past LWP entries for this person stay in the saved months but are no longer shown.')) return; p.teachers.splice(i,1); paraCloseModal(); paraRender(true); paraSchedulePush(); }
 
 // Guard: the gate inputs must be ready as soon as the link opens (before any tab is clicked)
 psFactorChanged(); psShowGate();
