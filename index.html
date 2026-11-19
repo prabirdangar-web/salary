@@ -3087,13 +3087,13 @@ paraRender();
 /* ===== PARA TEACHERS: separate table kept in the same cloud document (field "para") so existing admin rules apply ===== */
 const PARA_PAY_OLD=15523, PARA_PAY_NEW=20523, PARA_EFFECTIVE=new Date(2026,9,1);
 const PARA_DEFAULT=[
-{name:"BHARATI DEY",medium:"BENGALI",dob:"12.07.1973",qual:"B.A.(GEO)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171567657",ifsc:"SBIN0012397"},
-{name:"RINKU BHUIN",medium:"BENGALI",dob:"01.03.1980",qual:"B.A.(Beng)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171603530",ifsc:"SBIN0012397"},
-{name:"BISWARUP DEY",medium:"BENGALI",dob:"12.04.1987",qual:"B.A.(Eng)",doj:"17.12.2008",bank:"SBI TALDANGRA",acc:"32169323535",ifsc:"SBIN0012397"},
-{name:"DOLI MONDAL",medium:"BENGALI",dob:"17.01.1975",qual:"B.Sc.(Pure Sc.)",doj:"1st: 03.01.2007 / 2nd: 02.02.2010",bank:"SBI TALDANGRA",acc:"32171877251",ifsc:"SBIN0012397"},
-{name:"GANESH MANDI",medium:"SANTALI",dob:"04.01.1993",qual:"B.A.(Hons)",doj:"02.03.2015",bank:"UBI SIMLAPAL",acc:"0448010233552",ifsc:"PUNB0044820"},
-{name:"BIKASH BASKEY",medium:"SANTALI",dob:"18.10.1980",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35720612096",ifsc:"SBIN0012397"},
-{name:"LAKSHMI SAREN",medium:"SANTALI",dob:"25.02.1989",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35702689775",ifsc:"SBIN0012397"}
+{name:"BHARATI DEY",emp_code:"DDOW2749",pan:"AXOPD9265I",mob:"9679129420",medium:"BENGALI",dob:"12.07.1973",qual:"B.A.(GEO)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171567657",ifsc:"SBIN0012397"},
+{name:"RINKU BHUIN",emp_code:"KNUB5393",mob:"9732050650",medium:"BENGALI",dob:"01.03.1980",qual:"B.A.(Beng)",doj:"19.10.2004",bank:"SBI TALDANGRA",acc:"32171603530",ifsc:"SBIN0012397"},
+{name:"BISWARUP DEY",emp_code:"RVUD5747",pan:"BDMPD6641N",mob:"9153461286",medium:"BENGALI",dob:"12.04.1987",qual:"B.A.(Eng)",doj:"17.12.2008",bank:"SBI TALDANGRA",acc:"32169323535",ifsc:"SBIN0012397"},
+{name:"DOLI MONDAL",emp_code:"BQIT4906",pan:"ARXPM0124H",mob:"9434181889",medium:"BENGALI",dob:"17.01.1975",qual:"B.Sc.(Pure Sc.)",doj:"1st: 03.01.2007 / 2nd: 02.02.2010",bank:"SBI TALDANGRA",acc:"32171877251",ifsc:"SBIN0012397"},
+{name:"GANESH MANDI",emp_code:"XGGE2049",pan:"BWZPM7708K",mob:"9002652478",medium:"SANTALI",dob:"04.01.1993",qual:"B.A.(Hons)",doj:"02.03.2015",bank:"UBI SIMLAPAL",acc:"0448010233552",ifsc:"PUNB0044820"},
+{name:"BIKASH BASKEY",emp_code:"THUL6432",pan:"CJWPB9081M",mob:"9641767566",medium:"SANTALI",dob:"18.10.1980",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35720612096",ifsc:"SBIN0012397"},
+{name:"LAKSHMI SAREN",emp_code:"BCZF4671",pan:"JJZPS3172Q",mob:"8670207687",medium:"SANTALI",dob:"25.02.1989",qual:"B.A.(Pass)",doj:"01.03.2016",bank:"SBI TALDANGRA",acc:"35702689775",ifsc:"SBIN0012397"}
 ];
 const PARA_MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 let paraPushTimer=null;
@@ -3113,6 +3113,7 @@ function paraDefaultMonth(){ const now=new Date(); let y=now.getFullYear(), m=no
 function paraInit(){
   const p=paraData();
   if(!p.teachers.length){ p.teachers=PARA_DEFAULT.map((t,i)=>Object.assign({id:'PT'+(i+1)},t)); paraSchedulePush(); }
+  else { let ch=false; p.teachers.forEach(t=>{ const d=PARA_DEFAULT.find(x=>x.name===String(t.name||'').trim().toUpperCase()); if(!d) return; ['emp_code','pan','mob'].forEach(k=>{ if(d[k] && !String(t[k]||'').trim()){ t[k]=d[k]; ch=true; } }); }); if(ch) paraSchedulePush(); }
   const mi=document.getElementById('para-month'); if(!mi.value) mi.value=paraDefaultMonth();
   paraRender(true);
 }
