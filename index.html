@@ -408,6 +408,7 @@
     <button class="nav-tab" onclick="switchTab('payslip')">🧾 My Pay Slip</button>
     <button class="nav-tab admin-only" onclick="switchTab('itaxadmin')">💰 I.Tax (Admin)</button>
     <button class="nav-tab admin-only" onclick="switchTab('para')">🧑‍🏫 Para Teachers</button>
+    <button class="nav-tab admin-only" onclick="switchTab('voc')">🎓 VOC Teachers</button>
   </div>
 </div>
 
@@ -737,6 +738,60 @@
     <div id="itxa-inputs" class="no-print"></div>
     <div id="itxa-sheet"></div>
   </div>
+
+<!-- ================= VOC (VOCATIONAL) TEACHERS (separate table, live-synced) ================= -->
+<div id="tab-voc" class="tab-content">
+<div class="controls-card no-print" style="margin:0 0 16px 0;">
+  <div class="control-group"><label>Salary Month</label><input type="month" id="voc-month" onchange="vocRender(true)"></div>
+  <div class="control-group"><label>Level</label><select id="voc-level" onchange="vocRender(true)"><option value="ALL">ALL</option><option value="X+2">X+2 LEVEL</option><option value="VIII+">VIII+ LEVEL</option></select></div>
+  <div class="control-group"><label>Pay slip months visible to VOC teachers: from</label><input type="month" id="voc-from" onchange="vocCfgChange()" title="Every completed month from here appears in the VOC teacher's My Pay Slip. Blank = earliest saved month."></div>
+  <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-success" onclick="vocOpenModal(-1)">➕ Add VOC Teacher</button>
+    <button class="btn btn-primary" onclick="vocSaveMonth()">💾 Save This Month</button>
+    <button class="btn btn-outline" onclick="vocSlips(null)">🧾 All Pay Slips</button>
+    <button class="btn btn-outline" onclick="vocPrintTable()">🖨️ Print Bank Advice</button>
+  </div>
+</div>
+<div id="voc-msg" class="ps-hint no-print" style="display:none;"></div>
+<style>
+@media print{ body.voc-slips-only #voc-sheet{display:none!important} body.voc-slips-only #voc-slipbox{display:block!important} }
+</style>
+<div id="voc-slipbox" style="display:none;margin:0 0 16px 0;"></div>
+<div class="table-responsive" id="voc-sheet"></div>
+<div class="table-responsive no-print" style="margin-top:16px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+    <h3 style="margin:0;font-size:15px;color:var(--primary);">👁 Individual Live View</h3>
+    <select id="voc-ind" onchange="vocIndRender()" style="min-width:260px;"></select>
+    <span style="font-size:11px;color:#718096;">Admissible Pay, Arrear and Overdrawn are typed in the table above for the selected month (blank = default). Completed months appear automatically; the running month appears after "Save This Month".</span>
+  </div>
+  <div id="voc-ind-out"></div>
+</div>
+<div class="modal-overlay" id="vocModal"><div class="modal-card" style="max-width:600px;">
+  <h3 id="vocModalTitle" style="margin-top:0;color:var(--primary);">VOC Teacher</h3>
+  <input type="hidden" id="vm-idx" value="-1">
+  <div class="form-grid">
+    <div class="form-group full-width"><label>Name</label><input id="vm-name" type="text" style="text-transform:uppercase"></div>
+    <div class="form-group"><label>Level</label><select id="vm-level"><option>X+2</option><option>VIII+</option></select></div>
+    <div class="form-group"><label>Engagement / Designation</label><select id="vm-etype"><option>CONTRACTUAL TEACHER</option><option>CONTRACTUAL INSTRUCTOR</option><option>PART TIME TEACHER</option></select></div>
+    <div class="form-group"><label>Employee ID</label><input id="vm-code" type="text" placeholder="VE2007007949"></div>
+    <div class="form-group"><label>PAN</label><input id="vm-pan" type="text" maxlength="10" style="text-transform:uppercase"></div>
+    <div class="form-group"><label>Date of Birth</label><input id="vm-dob" type="date"></div>
+    <div class="form-group"><label>Mobile No.</label><input id="vm-mob" type="tel" placeholder="10-digit"></div>
+    <div class="form-group"><label>Qualification</label><input id="vm-qual" type="text"></div>
+    <div class="form-group"><label>Date of Joining (this VTC)</label><input id="vm-doj" type="text" placeholder="dd.mm.yyyy"></div>
+    <div class="form-group"><label>Bank &amp; Branch</label><input id="vm-bank" type="text" placeholder="SBI TALDANGRA"></div>
+    <div class="form-group"><label>Account No.</label><input id="vm-acc" type="text"></div>
+    <div class="form-group"><label>IFS Code</label><input id="vm-ifsc" type="text"></div>
+    <div class="form-group"><label>Actual Remuneration / month (₹)</label><input id="vm-rem" type="number" min="0" step="1"></div>
+    <div class="form-group"><label>Default Admissible Pay (₹) blank = full</label><input id="vm-adm" type="number" min="0" step="1"></div>
+    <div class="form-group full-width" style="font-size:11px;color:#718096;">VOC teacher can open their own pay slip at the same link (My Pay Slip) by entering any two of: Employee ID, PAN, Date of Birth, Mobile.</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:16px;">
+    <button class="btn btn-danger" id="vm-del" onclick="vocDelete()">Delete</button>
+    <div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="vocCloseModal()">Cancel</button><button class="btn btn-success" onclick="vocSaveTeacher()">Save</button></div>
+  </div>
+</div></div>
+</div>
 
   <!-- ================= PARA TEACHERS (separate table, live-synced) ================= -->
 <div id="tab-para" class="tab-content">
@@ -1471,8 +1526,9 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('tab-' + tabId).classList.add('active');
-  document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin' || tabId === 'para') ? 'none' : '';
+  document.getElementById('top-controls').style.display = (tabId === 'payslip' || tabId === 'itaxadmin' || tabId === 'para' || tabId === 'voc') ? 'none' : '';
 if (tabId === 'para') paraInit();
+  if (tabId === 'voc') vocInit();
   if (tabId === 'itaxadmin') itxaInit();
   if (tabId === 'payslip') initPaySlipTab();
   
@@ -2575,7 +2631,7 @@ async function psVerify() {
       if (a && b && a === v1 && b === v2) found = e;
     });
     if (found) code = String(found.emp_code).trim().toUpperCase();
-else { const pt = paraData().teachers.find(t => { const a = paraFact(t, f1), b = paraFact(t, f2); return a && b && a === v1 && b === v2; }); if (pt) { psParaDoc = paraBuildDoc(pt); code = psParaDoc.code; } }
+else { const pt = paraData().teachers.find(t => { const a = paraFact(t, f1), b = paraFact(t, f2); return a && b && a === v1 && b === v2; }); if (pt) { psParaDoc = paraBuildDoc(pt); code = psParaDoc.code; } else { const vt = vocData().teachers.find(t => { const a = paraFact(t, f1), b = paraFact(t, f2); return a && b && a === v1 && b === v2; }); if (vt) { psParaDoc = vocBuildDoc(vt); code = psParaDoc.code; } } }
   } else {
     // Staff (no login): fetch ONLY the one document that belongs to these two details.
     let doc = null;
@@ -2651,6 +2707,7 @@ async function publishSlipLookup(force) {
         writes.set(await slipPairId(fs[i], vals[fs[i]], fs[j], vals[fs[j]]), { payload, sig });
     }
     await paraAddWrites(writes);
+    await vocAddWrites(writes);
 const idsRef = db.collection('tfhs').doc('salarySlipIds');
     const old = ((await idsRef.get()).data() || {}).ids || [];
     const ids = [...writes.keys()];
@@ -3165,7 +3222,7 @@ function paraBuildDoc(t){ const p=paraData(), pm={}; paraMonthList().forEach(ym=
 async function paraAddWrites(writes){ const p=paraData(); for(const t of p.teachers){ const facts=['code','pan','dob','mob'].filter(f=>paraFact(t,f)); if(facts.length<2) continue; const payload=paraBuildDoc(t), sig=slipSig(JSON.stringify(payload));
   for(let i=0;i<facts.length;i++) for(let j=i+1;j<facts.length;j++){ const id=await slipPairId(facts[i],paraFact(t,facts[i]),facts[j],paraFact(t,facts[j])); if(!writes.has(id)) writes.set(id,{payload,sig}); } } }
 function paraSlipFromDoc(doc,ym){ const t=doc.teacher, pm=(doc.paraMonths||{})[ym]||{}; return paraSlipHtml(t,ym,pm.lwp,doc.paraCfg); }
-function psParaRender(resetMonth){ const d=psParaDoc, t=d.teacher; const months=Object.keys(d.paraMonths||{}).sort().reverse();
+function psParaRender(resetMonth){ if(psParaDoc&&psParaDoc.kind==='voc'){ psVocRender(resetMonth); return; } const d=psParaDoc, t=d.teacher; const months=Object.keys(d.paraMonths||{}).sort().reverse();
   const sel=document.getElementById('ps-month'), old=sel.value; sel.innerHTML=months.map(m=>'<option value="'+m+'">'+paraCycle(m).label+'</option>').join('');
   ['ps-itax','ps-cert'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; }); psMode='slip';
   if(!months.length){ document.getElementById('ps-slip').innerHTML='<div class="payslip" style="text-align:center;">No salary record has been saved for you yet.</div>'; document.getElementById('ps-fy').innerHTML=''; psApplyMode(); return; }
@@ -3240,6 +3297,130 @@ window.addEventListener('appinstalled', () => { document.getElementById('ps-inst
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   }
 })();
+</script>
+<script>
+/* ===== VOC (VOCATIONAL) TEACHERS: stored inside the same cloud field "para" (para.voc) so existing admin rules apply ===== */
+const VOC_DEFAULT=[
+{name:"AVIRAM DEY",level:"VIII+",etype:"CONTRACTUAL INSTRUCTOR",emp_code:"VE2007007949",pan:"AYAPD4932A",dob:"12.08.1969",qual:"HS IN AG",doj:"30.05.2007",bank:"SBI TALDANGRA",acc:"XXXXXXX0651",ifsc:"SBIN0012397",rem:12172},
+{name:"SADHAN MANDAL",level:"X+2",etype:"CONTRACTUAL INSTRUCTOR",emp_code:"VE2007008506",pan:"BLBPM2933H",dob:"02.04.1978",qual:"B SC ITI",doj:"01.10.2021",bank:"SBI TALDANGRA",acc:"XXXXXXX7401",ifsc:"SBIN0012397",rem:12172},
+{name:"SADHAN CHAKRABORTY",level:"X+2",etype:"PART TIME TEACHER",emp_code:"VE2008015523",pan:"AYUPC9616J",dob:"06.01.1968",qual:"M COM B ED",doj:"08.08.2019",bank:"BANGIYA GRAMIN VIKASH BANK",acc:"XXXXXXXXX6255",ifsc:"PUNB0RRBBGB",rem:9273,adm:1273},
+{name:"CHANDAN GHOSH",level:"X+2",etype:"PART TIME TEACHER",emp_code:"VE2010007946",pan:"BAIPG1956J",dob:"10.05.1983",qual:"M SC MATH",doj:"21.08.2010",bank:"SBI TALDANGRA",acc:"XXXXXXX5366",ifsc:"SBIN0012397",rem:9273},
+{name:"RAM DULAL CHOUDHURY",level:"X+2",etype:"CONTRACTUAL TEACHER",emp_code:"VE2007007944",pan:"AIRPC4522E",dob:"01.12.1977",qual:"BCA",doj:"30.05.2007",bank:"SBI BANKURA",acc:"XXXXXXX2312",ifsc:"SBIN0000022",rem:15650},
+{name:"KUNTAL KUMAR MUKHOPADHYAY",level:"X+2",etype:"CONTRACTUAL TEACHER",emp_code:"VE2007008340",pan:"AKHPM9703D",dob:"04.01.1977",qual:"DEE",doj:"30.05.2007",bank:"SBI TALDANGRA",acc:"XXXXXXX6680",ifsc:"SBIN0012397",rem:15650},
+{name:"ANNAPURNA BHUIN",level:"X+2",etype:"PART TIME TEACHER",emp_code:"VE2010007871",pan:"BFXPB3304P",dob:"09.04.1988",qual:"MA IN ENGLISH B ED",doj:"16.04.2018",bank:"SBI TALDANGRA",acc:"XXXXXXX5637",ifsc:"SBIN0012397",rem:11593,adm:3593},
+{name:"GOPINATH DE",level:"X+2",etype:"PART TIME TEACHER",emp_code:"VE2007008337",doj:"30.05.2007",rem:9273}
+];
+function vocData(){ const p=paraData(); if(!p.voc||typeof p.voc!=='object') p.voc={}; const v=p.voc; if(!Array.isArray(v.teachers)) v.teachers=[]; if(!v.months||typeof v.months!=='object') v.months={}; if(!v.cfg||typeof v.cfg!=='object') v.cfg={from:''}; return v; }
+function vocLabel(ym){ const a=ym.split('-').map(Number); return PARA_MONTHS[a[1]-1]+'-'+a[0]; }
+function vocPeriod(ym){ const a=ym.split('-').map(Number), last=new Date(a[0],a[1],0).getDate(), d2=n=>String(n).padStart(2,'0'); return '01.'+d2(a[1])+'.'+a[0]+' to '+d2(last)+'.'+d2(a[1])+'.'+a[0]; }
+function vocNum(v,d){ const n=parseFloat(v); return isNaN(n)?d:n; }
+function vocCalc(t,adj){ adj=adj||{}; const rem=Math.round(vocNum(t.rem,0)); const dflt=(t.adm===undefined||t.adm===null||t.adm==='')?rem:vocNum(t.adm,rem); const adm=Math.max(0,Math.round(vocNum(adj.adm,dflt))), arr=Math.round(vocNum(adj.arr,0)), od=Math.round(vocNum(adj.od,0)); return {rem:rem,adm:adm,arr:arr,od:od,net:adm+arr-od}; }
+function vocMonthList(){ const v=vocData(), set=new Set(Object.keys(v.months)); const ok=/^\d{4}-\d{2}$/.test(v.cfg.from||''); const from=ok?v.cfg.from:[...set].sort()[0];
+  if(from){ const now=Date.now(); let a=from.split('-').map(Number), y=a[0], m=a[1]; for(let i=0;i<72;i++){ if(new Date(y,m,1).getTime()>now) break; set.add(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } }
+  return [...set].sort(); }
+function vocDefaultMonth(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+function vocInit(){
+  const v=vocData();
+  if(!v.teachers.length){ v.teachers=VOC_DEFAULT.map((t,i)=>Object.assign({id:'VT'+(i+1)},t));
+    if(!Object.keys(v.months).length){ const g=v.teachers.find(t=>t.emp_code==='VE2007008337'); if(g){ v.months['2026-11']={adj:{[g.id]:{adm:8000}},updatedAt:new Date().toISOString()}; } }
+    paraSchedulePush(); }
+  const mi=document.getElementById('voc-month'); if(!mi.value) mi.value=vocDefaultMonth();
+  vocRender(true);
+}
+function vocRowCalc(id,ym){ const v=vocData(), t=v.teachers.find(x=>x.id===id); return vocCalc(t,((v.months[ym]||{}).adj||{})[id]); }
+function vocRender(force){
+  if(!isAdmin) return;
+  const act=document.activeElement; if(!force && act && act.classList && act.classList.contains('voc-in')) return;
+  const v=vocData(), mi=document.getElementById('voc-month'); if(!mi||!mi.value) return;
+  const pf=document.getElementById('voc-from'); if(pf && document.activeElement!==pf) pf.value=v.cfg.from||'';
+  const ym=mi.value, lv=document.getElementById('voc-level').value, adj=((v.months[ym]||{}).adj)||{};
+  const list=v.teachers.map((t,i)=>({t,i})).filter(o=>lv==='ALL'||o.t.level===lv);
+  let h='<div style="text-align:center;margin-bottom:10px;"><div style="font-size:17px;font-weight:800;color:var(--primary);">TALDANGRA FULMATI HIGH SCHOOL (H.S.)</div><div style="font-size:12px;font-weight:600;">BANK ADVICE / REMUNERATION STATEMENT OF CONTRACTUAL &amp; PART-TIME VOC TEACHERS FOR THE MONTH OF '+vocLabel(ym).toUpperCase()+(lv!=='ALL'?' &ndash; '+lv+' LEVEL':'')+'</div><div style="font-size:11px;color:#4a5568;">Institute Code 1913009 &nbsp;|&nbsp; Period '+vocPeriod(ym)+'</div></div>';
+  h+='<table class="sheet-table"><thead><tr><th>Sl</th><th>Employee ID</th><th>Name of Teacher</th><th>Level</th><th>Engagement Type</th><th>Bank &amp; Branch</th><th>Account No. / IFSC</th><th>Actual Rem.</th><th>Admissible Pay</th><th>Arrear</th><th>Overdrawn</th><th>Net Payable</th><th>Signature</th><th class="no-print">Edit</th></tr></thead><tbody>';
+  list.forEach((o,k)=>{ const t=o.t, a=adj[t.id]||{}, c=vocCalc(t,a);
+    const inp=(f,ph)=>'<input class="voc-in" type="number" min="0" step="1" value="'+(a[f]!==undefined&&a[f]!==''?paraEsc(a[f]):'')+'" placeholder="'+ph+'" style="width:74px;text-align:center;" oninput="vocAdj(\''+paraEsc(t.id)+'\',\''+f+'\',this.value)">';
+    h+='<tr data-id="'+paraEsc(t.id)+'"><td class="center bold">'+(k+1)+'</td><td class="center">'+paraEsc(t.emp_code||'—')+'</td><td><strong>'+paraEsc(t.name)+'</strong><br><small style="color:#718096;">'+paraDobDisp(t.dob)+' | '+paraEsc(t.qual||'')+'</small><br><small style="color:'+(paraFactCount(t)>=2?'#718096':'#b91c1c')+';">PAN: '+paraEsc(t.pan||'—')+' | Mob: '+paraEsc(t.mob||'—')+(paraFactCount(t)>=2?'':' &nbsp;⚠ fill 2+ for staff login')+'</small></td><td class="center">'+paraEsc(t.level)+'</td><td class="center">'+paraEsc(t.etype)+'</td><td class="center">'+paraEsc(t.bank||'')+'</td><td class="center">'+paraEsc(t.acc||'')+'<br><small>'+paraEsc(t.ifsc||'')+'</small></td>'
+     +'<td class="center">'+paraInr(c.rem)+'</td><td class="center">'+inp('adm',String(vocCalc(t,{}).adm))+'</td><td class="center">'+inp('arr','0')+'</td><td class="center">'+inp('od','0')+'</td><td class="center bold vn">'+paraInr(c.net)+'</td><td></td><td class="center no-print"><button class="btn btn-outline" style="padding:3px 8px;font-size:11px;" onclick="vocOpenModal('+o.i+')">✏️</button> <button class="btn btn-outline" style="padding:3px 8px;font-size:11px;" title="Pay slip" onclick="vocSlips(\''+paraEsc(t.id)+'\')">🧾</button></td></tr>'; });
+  if(!list.length) h+='<tr><td colspan="14" class="center">No VOC teachers in this selection.</td></tr>';
+  h+='</tbody><tfoot><tr><td colspan="7" class="center bold">TOTAL</td><td class="center bold" id="voc-tr"></td><td class="center bold" id="voc-ta"></td><td class="center bold" id="voc-tA"></td><td class="center bold" id="voc-to"></td><td class="center bold" id="voc-tn"></td><td></td><td class="no-print"></td></tr></tfoot></table><div id="voc-words" style="margin-top:8px;font-size:12px;font-weight:700;"></div>'
+     +'<div style="display:flex;justify-content:space-between;margin-top:46px;font-size:11px;font-weight:700;"><div>Signature of Administrator / Secretary / President</div><div>Seal &amp; Signature of the Head of the Institute</div></div>';
+  document.getElementById('voc-sheet').innerHTML=h;
+  vocTotals();
+  const sel=document.getElementById('voc-ind'), keep=sel.value;
+  sel.innerHTML=v.teachers.map(t=>'<option value="'+paraEsc(t.id)+'">'+paraEsc(t.name)+' ('+paraEsc(t.level)+')</option>').join('');
+  if(keep && v.teachers.some(t=>t.id===keep)) sel.value=keep;
+  vocIndRender();
+}
+function vocTotals(){ const ym=document.getElementById('voc-month').value; let r=0,a=0,A=0,o=0,n=0;
+  document.querySelectorAll('#voc-sheet tbody tr[data-id]').forEach(tr=>{ const c=vocRowCalc(tr.getAttribute('data-id'),ym); r+=c.rem; a+=c.adm; A+=c.arr; o+=c.od; n+=c.net; const cell=tr.querySelector('.vn'); if(cell) cell.textContent=paraInr(c.net); });
+  const set=(id,x)=>{ const el=document.getElementById(id); if(el) el.textContent=paraInr(x); }; set('voc-tr',r); set('voc-ta',a); set('voc-tA',A); set('voc-to',o); set('voc-tn',n);
+  const w=document.getElementById('voc-words'); if(w){ w.textContent='Grand Total: Rs. '+String(numberToWordsINR(n)).replace(/^\s*Rupees\s*/i,'').replace(/\s*Only\s*$/i,'')+' Only'; } }
+function vocAdj(id,f,val){ const ym=document.getElementById('voc-month').value, v=vocData(); v.months[ym]=v.months[ym]||{}; v.months[ym].adj=v.months[ym].adj||{}; const a=(v.months[ym].adj[id]=v.months[ym].adj[id]||{});
+  if(val===''||isNaN(parseFloat(val))) delete a[f]; else a[f]=parseFloat(val);
+  if(!Object.keys(a).length) delete v.months[ym].adj[id];
+  v.months[ym].updatedAt=new Date().toISOString(); vocTotals(); paraSchedulePush(); }
+function vocCfgChange(){ const v=vocData(); v.cfg.from=(document.getElementById('voc-from')||{}).value||''; paraSchedulePush(); vocIndRender(); }
+function vocSaveMonth(){ const ym=document.getElementById('voc-month').value, v=vocData(); v.months[ym]=v.months[ym]||{}; v.months[ym].adj=v.months[ym].adj||{}; v.months[ym].updatedAt=new Date().toISOString(); paraSchedulePush(); const m=document.getElementById('voc-msg'); m.style.display=''; m.textContent='Saved '+vocLabel(ym)+' – visible on all computers.'; vocIndRender(); }
+function vocIndRender(){ const out=document.getElementById('voc-ind-out'); if(!out) return; const v=vocData(), id=document.getElementById('voc-ind').value, t=v.teachers.find(x=>x.id===id); if(!t){ out.innerHTML=''; return; }
+  const set=new Set(vocMonthList()); const cur=document.getElementById('voc-month').value; if(cur) set.add(cur); const yms=[...set].sort().reverse();
+  let tot=0, h='<div style="font-size:12px;margin-bottom:6px;"><b>'+paraEsc(t.name)+'</b> &nbsp;|&nbsp; '+paraEsc(t.etype)+' ('+paraEsc(t.level)+') &nbsp;|&nbsp; ID '+paraEsc(t.emp_code||'—')+' &nbsp;|&nbsp; PAN '+paraEsc(t.pan||'—')+' &nbsp;|&nbsp; DOB '+paraDobDisp(t.dob)+' &nbsp;|&nbsp; A/c '+paraEsc(t.bank||'')+' '+paraEsc(t.acc||'')+'</div><table class="sheet-table"><thead><tr><th>Month</th><th>Period</th><th>Actual Rem.</th><th>Admissible</th><th>Arrear</th><th>Overdrawn</th><th>Net</th></tr></thead><tbody>';
+  yms.forEach(ym=>{ const c=vocCalc(t,(((v.months[ym]||{}).adj)||{})[id]); tot+=c.net; h+='<tr><td class="center bold">'+vocLabel(ym)+'</td><td class="center">'+vocPeriod(ym)+'</td><td class="center">'+paraInr(c.rem)+'</td><td class="center">'+paraInr(c.adm)+'</td><td class="center">'+(c.arr?paraInr(c.arr):'-')+'</td><td class="center">'+(c.od?paraInr(c.od):'-')+'</td><td class="center bold">'+paraInr(c.net)+'</td></tr>'; });
+  out.innerHTML=h+'</tbody><tfoot><tr><td colspan="6" class="center bold">TOTAL NET (months shown)</td><td class="center bold">'+paraInr(tot)+'</td></tr></tfoot></table>'; }
+function vocBuildDoc(t){ const v=vocData(), pm={}; vocMonthList().forEach(ym=>{ const c=vocCalc(t,(((v.months[ym]||{}).adj)||{})[t.id]); pm[ym]={rem:c.rem,adm:c.adm,arr:c.arr,od:c.od}; });
+  return JSON.parse(JSON.stringify({code:String(t.emp_code||t.id).trim().toUpperCase(),para:true,kind:'voc',months:{},configs:{},taxDecl:{},teacher:{name:t.name,level:t.level,etype:t.etype,dob:paraDobIso(t.dob),qual:t.qual||'',doj:t.doj||'',bank:t.bank||'',acc:t.acc||'',ifsc:t.ifsc||'',emp_code:t.emp_code||'',pan:t.pan||'',mob:t.mob||''},paraMonths:pm,paraCfg:{}})); }
+async function vocAddWrites(writes){ const v=vocData(); for(const t of v.teachers){ const facts=['code','pan','dob','mob'].filter(f=>paraFact(t,f)); if(facts.length<2) continue; const payload=vocBuildDoc(t), sig=slipSig(JSON.stringify(payload));
+  for(let i=0;i<facts.length;i++) for(let j=i+1;j<facts.length;j++){ const id=await slipPairId(facts[i],paraFact(t,facts[i]),facts[j],paraFact(t,facts[j])); if(!writes.has(id)) writes.set(id,{payload,sig}); } } }
+function vocSlipHtml(t,ym,c){ const w=String(numberToWordsINR(c.net)).replace(/^\s*Rupees\s*/i,'').replace(/\s*Only\s*$/i,''), red=Math.max(0,c.rem-c.adm), gross=c.adm+c.arr;
+  return '<div class="para-slip"><h4>TALDANGRA FULMATI HIGH SCHOOL (H.S.)</h4><div style="text-align:center;font-size:10.5px;">P.O. &amp; Block - Taldangra, Sub-Division - Khatra, District - Bankura, West Bengal - 722152 &nbsp;|&nbsp; VTC Code 1913009</div><div class="pst">PAY SLIP &ndash; '+paraEsc(t.etype)+' (VOCATIONAL) &nbsp;|&nbsp; MONTH OF '+vocLabel(ym).toUpperCase()+'</div>'
+   +'<table><tr><td><b>Name</b></td><td colspan="3"><b>'+paraEsc(t.name)+'</b></td></tr>'
+   +'<tr><td><b>Employee ID</b></td><td>'+paraEsc(t.emp_code||'N.A.')+'</td><td><b>PAN</b></td><td>'+paraEsc(t.pan||'N.A.')+'</td></tr>'
+   +'<tr><td><b>Date of Birth</b></td><td>'+paraDobDisp(t.dob)+'</td><td><b>Date of Joining (this VTC)</b></td><td>'+paraEsc(t.doj||'N.A.')+'</td></tr>'
+   +'<tr><td><b>Qualification</b></td><td>'+paraEsc(t.qual||'N.A.')+'</td><td><b>Course Group</b></td><td>'+paraEsc(t.level)+' LEVEL</td></tr>'
+   +'<tr><td><b>Bank &amp; Branch</b></td><td>'+paraEsc(t.bank||'N.A.')+'</td><td><b>Account / IFSC</b></td><td>'+paraEsc(t.acc||'N.A.')+' / '+paraEsc(t.ifsc||'N.A.')+'</td></tr>'
+   +'<tr><td><b>Pay Period</b></td><td colspan="3">'+vocPeriod(ym)+'</td></tr></table>'
+   +'<table><thead><tr><th>EARNINGS</th><th class="r">₹</th><th>DEDUCTIONS</th><th class="r">₹</th></tr></thead><tbody>'
+   +'<tr><td>Actual Remuneration / month</td><td class="r">'+paraInr(c.rem)+'</td><td>Overdrawn Recovery</td><td class="r">'+(c.od?paraInr(c.od):'0')+'</td></tr>'
+   +'<tr><td>Less: Not payable by this VTC</td><td class="r">'+(red?'-'+paraInr(red):'0')+'</td><td></td><td></td></tr>'
+   +'<tr><td>Arrear</td><td class="r">'+(c.arr?paraInr(c.arr):'0')+'</td><td></td><td></td></tr>'
+   +'<tr><td><b>Gross Payable</b></td><td class="r"><b>'+paraInr(gross)+'</b></td><td><b>Total Deduction</b></td><td class="r"><b>'+paraInr(c.od)+'</b></td></tr>'
+   +'<tr><td colspan="3" style="background:#f0f6ff"><b>NET REMUNERATION PAYABLE</b></td><td class="r" style="background:#f0f6ff"><b>₹ '+paraInr(c.net)+'</b></td></tr></tbody></table>'
+   +'<div style="margin-top:5px;font-size:11px;">Rupees (in words): <b>Rupees '+paraEsc(w)+' Only</b></div>'
+   +'<div class="sg"><div>Signature of Teacher / Instructor</div><div>Signature of Headmaster<br>PRABIR KUMAR DANGAR (with school seal)</div></div></div>'; }
+function vocSlips(id){ const v=vocData(), ym=document.getElementById('voc-month').value; if(!ym) return; const lv=document.getElementById('voc-level').value;
+  const list=id?v.teachers.filter(t=>t.id===id):v.teachers.filter(t=>lv==='ALL'||t.level===lv);
+  const box=document.getElementById('voc-slipbox');
+  box.innerHTML='<div class="no-print" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><b style="color:var(--primary);">Pay Slip'+(list.length>1?'s':'')+' &ndash; '+vocLabel(ym)+'</b><button class="btn btn-primary" onclick="vocPrintSlips()">🖨️ Print Pay Slip'+(list.length>1?'s (2 per page)':'')+'</button><button class="btn btn-outline" onclick="vocCloseSlips()">✖ Close</button></div>'+list.map(t=>vocSlipHtml(t,ym,vocCalc(t,(((v.months[ym]||{}).adj)||{})[t.id]))).join('');
+  box.style.display='block'; box.scrollIntoView({behavior:'smooth',block:'start'}); }
+function vocClearPrintMode(){ document.body.classList.remove('voc-slips-only'); const st=document.getElementById('vocPageStyle'); if(st) st.remove(); }
+function vocCloseSlips(){ const b=document.getElementById('voc-slipbox'); b.style.display='none'; b.innerHTML=''; vocClearPrintMode(); }
+function vocPrintSlips(){ vocClearPrintMode(); const st=document.createElement('style'); st.id='vocPageStyle'; st.textContent='@page { size: A4 portrait; margin: 8mm; }'; document.head.appendChild(st); document.body.classList.add('voc-slips-only'); window.print(); }
+function vocPrintTable(){ vocClearPrintMode(); const st=document.createElement('style'); st.id='vocPageStyle'; st.textContent='@page { size: A4 landscape; margin: 8mm; } @media print{ #voc-slipbox{display:none!important} }'; document.head.appendChild(st); window.print(); }
+function vocOpenModal(i){ const v=vocData(), t=i>=0?v.teachers[i]:{}; document.getElementById('vm-idx').value=i; document.getElementById('vocModalTitle').textContent=i>=0?'Edit VOC Teacher':'Add VOC Teacher';
+  [['name','name'],['level','level'],['etype','etype'],['code','emp_code'],['pan','pan'],['qual','qual'],['doj','doj'],['bank','bank'],['acc','acc'],['ifsc','ifsc'],['mob','mob'],['rem','rem'],['adm','adm']].forEach(a=>{ const el=document.getElementById('vm-'+a[0]); const val=t[a[1]]; el.value=(val===undefined||val===null)?(a[0]==='level'?'X+2':(a[0]==='etype'?'CONTRACTUAL TEACHER':'')):val; });
+  document.getElementById('vm-dob').value=paraDobIso(t.dob);
+  document.getElementById('vm-del').style.display=i>=0?'':'none'; document.getElementById('vocModal').classList.add('active'); }
+function vocCloseModal(){ document.getElementById('vocModal').classList.remove('active'); }
+function vocSaveTeacher(){ const g=k=>document.getElementById('vm-'+k).value.trim(); const name=g('name').toUpperCase(); if(!name){ alert('Enter the name.'); return; }
+  const v=vocData(), i=parseInt(document.getElementById('vm-idx').value), admRaw=g('adm');
+  const rec={name,level:g('level'),etype:g('etype'),emp_code:g('code').replace(/\s+/g,'').toUpperCase(),pan:g('pan').replace(/\s+/g,'').toUpperCase(),dob:document.getElementById('vm-dob').value,qual:g('qual'),doj:g('doj'),bank:g('bank'),acc:g('acc'),ifsc:g('ifsc').toUpperCase(),mob:g('mob').replace(/\D/g,'').slice(-10),rem:vocNum(g('rem'),0)};
+  if(admRaw!=='') rec.adm=vocNum(admRaw,rec.rem);
+  if(rec.emp_code){ if(v.teachers.some((x,k)=>k!==i&&String(x.emp_code||'').toUpperCase()===rec.emp_code)||paraData().teachers.some(x=>String(x.emp_code||'').toUpperCase()===rec.emp_code)){ alert('This Employee ID is already used by another teacher.'); return; }
+    if(Object.values(cloudCache.months||{}).some(arr=>(arr||[]).some(e=>String(e.emp_code||'').trim().toUpperCase()===rec.emp_code))){ alert('This Employee ID already belongs to a regular staff member.'); return; } }
+  if(paraFactCount(rec)<2 && !confirm('Fewer than 2 of Employee ID / PAN / Date of Birth / Mobile are filled. This teacher will NOT be able to open their own pay slip until at least two are filled. Save anyway?')) return;
+  if(i>=0){ const old=v.teachers[i]; const m=Object.assign({},old,rec); if(admRaw==='') delete m.adm; v.teachers[i]=m; } else v.teachers.push(Object.assign({id:'VT'+Date.now().toString(36)},rec));
+  vocCloseModal(); vocRender(true); paraSchedulePush(); }
+function vocDelete(){ const v=vocData(), i=parseInt(document.getElementById('vm-idx').value); if(i<0) return; if(!confirm('Delete '+v.teachers[i].name+'?')) return; v.teachers.splice(i,1); vocCloseModal(); vocRender(true); paraSchedulePush(); }
+/* ---- VOC teacher's own view inside My Pay Slip ---- */
+function psVocRender(resetMonth){ const d=psParaDoc, t=d.teacher, pmx=d.paraMonths||{}; const months=Object.keys(pmx).sort().reverse();
+  const sel=document.getElementById('ps-month'), old=sel.value; sel.innerHTML=months.map(m=>'<option value="'+m+'">'+vocLabel(m)+'</option>').join('');
+  ['ps-itax','ps-cert'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; }); psMode='slip';
+  if(!months.length){ document.getElementById('ps-slip').innerHTML='<div class="payslip" style="text-align:center;">No salary record has been saved for you yet.</div>'; document.getElementById('ps-fy').innerHTML=''; psApplyMode(); return; }
+  sel.value=(!resetMonth&&months.includes(old))?old:months[0];
+  const cc=m=>{ const x=pmx[m]||{}; const rem=Number(x.rem)||0, adm=Number(x.adm)||0, arr=Number(x.arr)||0, od=Number(x.od)||0; return {rem,adm,arr,od,net:adm+arr-od}; };
+  document.getElementById('ps-slip').innerHTML=vocSlipHtml(t,sel.value,cc(sel.value));
+  let tn=0; const rows=months.map(m=>{ const c=cc(m); tn+=c.net; return '<tr'+(m===sel.value?' style="background:#fffbea;"':'')+'><td>'+vocLabel(m)+'</td><td class="num">'+psFmt(c.adm+c.arr)+'</td><td class="num">'+psFmt(c.od)+'</td><td class="num bold">'+psFmt(c.net)+'</td><td class="center"><button class="btn btn-outline" style="padding:3px 9px;font-size:11px;" onclick="document.getElementById(\'ps-month\').value=\''+m+'\';psRender();window.scrollTo(0,0);">View</button></td></tr>'; }).join('');
+  document.getElementById('ps-fy').innerHTML='<h3 style="margin:0 0 8px;color:var(--primary);font-size:14px;">Month-wise summary</h3><table class="sheet-table" style="max-width:560px;font-size:12px;"><thead><tr><th>Month</th><th>Gross (Rs.)</th><th>Deductions (Rs.)</th><th>Net Pay (Rs.)</th><th></th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr class="subtotal-row"><td>Total</td><td></td><td></td><td class="num">'+psFmt(tn)+'</td><td></td></tr></tfoot></table>';
+  psApplyMode(); }
 </script>
 </body>
 </html>
